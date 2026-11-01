@@ -278,19 +278,41 @@ export function createItemSystem(track, rng) {
   }
 
   // ------------------------------------------------------------ collect
+// Items that can be carried as a stack of up to three. The one-shot items (star, lightning,
+// cloud) are deliberately NOT in here — they are single-use by design.
+const STACKABLE_BASES = new Set([ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL, ITEM.BANANA]);
+
+  function baseOf(id) { return ITEM_TRIPLE[id] !== undefined ? ITEM_TRIPLE[id] : id; }
+
   function collect(k, ctx) {
-    if (!k || k.finished || k.item) return 0;
+    if (!k || k.finished) return 0;
     for (const b of boxes) {
       if (!b.active) continue;
       if (dist2(b.x, b.z, k.pos.x, k.pos.z) > ITEMS.boxRadius) continue;
+
+      const held = k.item || ITEM.NONE;
+      const heldBase = baseOf(held);
+      const holding = held !== ITEM.NONE;
+      if (holding && !STACKABLE_BASES.has(heldBase)) {
+        // A one-shot item stays in hand until it is used, and the box is left alone so the
+        // player can come back for it. The caller gets a reason it can show.
+        if (typeof ctx?.onBlocked === 'function') ctx.onBlocked(k, b, 'busy');
+        return 0;
+      }
+
       b.active = false;
       b.respawnAt = clock + ITEMS.boxRespawn;
       const r = (ctx && ctx.rng) || rng;
       const id = rngWeighted(r, tableForPlace(k.place || 1, fieldSize(ctx)));
-      k.item = id;
-      k.count = ITEM_COUNT[id] || 1;
+      const base = baseOf(id);
+      if (holding && base === heldBase && (k.count || 1) < 3) {
+        k.count = Math.min(3, (k.count || 1) + 1);
+      } else {
+        k.item = id;
+        k.count = ITEM_COUNT[id] || 1;
+      }
       callFx(ctx && ctx.fx, 'burst', b.x, b.y, b.z, { color: 0x6fd3ff, count: 14, speed: 5, life: 0.5 });
-      return id;
+      return k.item;
     }
     return 0;
   }

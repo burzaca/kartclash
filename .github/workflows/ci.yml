@@ -27,7 +27,10 @@ jobs:
       - name: Rendered-geometry audit (no GPU)
         run: npm run smoke:render
       - name: Split-screen camera framing (both tracks)
-        run: npm run probe:camera
+        run: |
+          npm run probe:camera
+          npm run probe:camera -- --cam=close
+          npm run probe:camera -- --cam=far
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:

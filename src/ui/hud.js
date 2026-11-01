@@ -67,6 +67,10 @@ export function createHUD(root, racerSpecs, opts) {
       overflow: hidden;
     }
     .kc-item.empty { border-style: dashed; border-color: rgba(255,255,255,0.25); }
+    .kc-item.pulse { animation: kc-pulse 0.55s ease-out; border-color: #ffd76a; }
+    @keyframes kc-pulse {
+      0% { transform: scale(1); } 30% { transform: scale(1.22); } 100% { transform: scale(1); }
+    }
     .kc-item svg { position: absolute; inset: 8% 8% 22%; width: 84%; height: 70%; }
     .kc-item .kc-itemname {
       position: absolute; left: 0; right: 0; bottom: 3px;
@@ -523,12 +527,14 @@ export function createHUD(root, racerSpecs, opts) {
       }
     },
 
-    // banner(text, sub, dur) - big centre text (countdown, lap alerts)
-    banner(text, sub, dur) {
+    // banner(text, sub, dur, onlyPane) - big centre text (countdown, lap alerts).
+    // onlyPane targets one player's half of the split screen; without it both panes show it.
+    banner(text, sub, dur, onlyPane) {
       // This used to write into viewport 0's POSITION BADGE and then fade it out — which
       // destroyed the position display for player 1 after the countdown and showed nothing
       // useful in the second pane. It is now a real centred overlay in each pane.
       for (let i = 0; i < 2; i++) {
+        if (onlyPane !== undefined && onlyPane !== null && i !== onlyPane) continue;
         const el = vpElements[i];
         el.banner.textContent = text || '';
         if (text && sub) {
@@ -591,7 +597,18 @@ export function createHUD(root, racerSpecs, opts) {
       }
     },
 
-    // setStatus(text) - small debug/status line
+    // pulseItem(i) - the item slot shakes once. Used when a box did nothing for this player,
+    // so "I drove through it and got nothing" is never left without an explanation.
+    pulseItem(i) {
+      const el = vpElements[i === 1 ? 1 : 0];
+      if (!el || !el.itemBox) return;
+      el.itemBox.classList.remove('pulse');
+      void el.itemBox.offsetWidth;              // force a reflow so the animation restarts
+      el.itemBox.classList.add('pulse');
+      clearTimeout(el._pulseT);
+      el._pulseT = setTimeout(() => el.itemBox.classList.remove('pulse'), 600);
+    },
+
     setStatus(text) {
       for (let i = 0; i < 2; i++) {
         vpElements[i].status.textContent = text;

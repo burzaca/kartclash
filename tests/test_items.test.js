@@ -132,10 +132,23 @@ test('collect: needs proximity, gives exactly one item, holder/finished cannot c
   assert.equal(items.boxes.filter((x) => !x.active).length, 1, 'exactly one box taken');
   assert.equal(b.active, false);
 
-  // holding an item: cannot collect another (neighbouring box stays)
+  // Holding a stackable item must never leave the player running through boxes getting nothing
+  // (that was the report: "at some point I stopped being able to pickup at all"). A stackable in
+  // hand means the next box tops the stack up or replaces it.
   const nb = items.boxes[3]; k.pos.x = nb.x; k.pos.z = nb.z;
-  assert.equal(items.collect(k, ctx), 0);
-  assert.equal(nb.active, true);
+  k.item = ITEM.MUSHROOM; k.count = 1;
+  const again = items.collect(k, ctx);
+  assert.notEqual(again, 0, 'a box did nothing while a stackable item was held');
+  assert.ok(nb.active === false, 'the box was not consumed');
+  assert.ok(k.count >= 1 && k.count <= 3, `stack count ${k.count} is out of range`);
+
+  // A one-shot item is kept until it is used, and the caller is told why nothing happened.
+  k.item = ITEM.STAR; k.count = 1;
+  const nb2 = items.boxes[4]; k.pos.x = nb2.x; k.pos.z = nb2.z;
+  let blocked = null;
+  assert.equal(items.collect(k, { karts: [k], onBlocked: (kk, box, why) => { blocked = { id: kk.id, why }; } }), 0);
+  assert.equal(nb2.active, true, 'a box was consumed even though the player is holding a star');
+  assert.deepEqual(blocked, { id: 0, why: 'busy' }, 'the caller was not told why the box did nothing');
 
   // finished kart never collects
   const f = makeTestKart(1, { finished: true }); f.pos.x = nb.x; f.pos.z = nb.z;

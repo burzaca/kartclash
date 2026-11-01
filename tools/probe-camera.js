@@ -67,6 +67,7 @@ function runTrack(def) {
   race.totalLaps = def.laps;
 
   const rig = createCameraRig(THREE);
+  rig.setPreset(arg('cam', 'normal'));      // measure every camera preset, not just the default
   rig.addCamera(); rig.addCamera();          // player 1 (top half), player 2 (bottom half)
 
   // Two half-height viewports, as the game lays them out at 16:9.
@@ -87,6 +88,12 @@ function runTrack(def) {
   });
 
   let frames = 0, worstSize = Infinity, bestSize = 0, offScreen = 0, buried = 0, roadMiss = 0;
+  // How far down the track stays in view — the measurable version of "see further ahead".
+  const AHEAD_LADDER = [10, 25, 40, 60, 90, 140, 200, 280];
+  const visibleAhead = {};
+  const aheadByProbe = [];
+  let probes = 0;
+  const maxProbes = Math.max(4, Math.floor(SECS / STEP / 4));
   const samples = [];
   const noFX = { burst() {}, trail() {}, ring() {}, confetti() {} };
   const rng = mulberry32(1234);
@@ -149,19 +156,32 @@ function runTrack(def) {
       if (h > 0.34) samples.push({ t: +race.clock.toFixed(1), why: `kart fills ${(h * 100).toFixed(1)}% of the frame — camera too close` });
       worstSize = Math.min(worstSize, h); bestSize = Math.max(bestSize, h);
 
-      // the road ahead must be in frame — a chase cam that only shows sky is useless
-      const sAhead = k.progress * track.pl.total + 25;
-      const ahead = track.pointAt(sAhead, 0);
-      if (ahead) {
+      // the road ahead must be in frame — a chase cam that only shows sky is useless.
+      // The player asked for the camera to "go forward": that means the visible road distance is
+      // the thing to measure, so probe a ladder of distances and keep the farthest one that is
+      // in frame in EVERY sampled frame.
+      const along = k.progress * track.pl.total;
+      let farThisProbe = 0;
+      for (const d of AHEAD_LADDER) {
+        const ahead = track.pointAt(along + d, 0);
+        if (!ahead) continue;
         const p = ndc(cam, ahead.x, track.surfaceY(ahead.x, ahead.z), ahead.z);
-        if (!p || p.z > 1 || Math.abs(p.x) > 1 || p.y > 0.98) roadMiss++;
+        if (p && p.z <= 1 && Math.abs(p.x) <= 1 && p.y <= 0.98) { visibleAhead[d] = (visibleAhead[d] || 0) + 1; farThisProbe = d; }
       }
+      aheadByProbe.push(farThisProbe);
+      if (++probes >= maxProbes) break;
     }
   }
+
+  const sorted = aheadByProbe.slice().sort((a, b) => a - b);
+  const worstAhead = sorted[0] || 0;
+  const typicalAhead = sorted[Math.floor(sorted.length / 2)] || 0;
+  roadMiss = probes - (visibleAhead[25] || 0);
 
   const finishers = standings(race).filter((r) => r.finished).length;
   console.log(`  sim: ${frames} frames, race clock ${race.clock.toFixed(1)}s, phase ${race.phase}, finishers ${finishers}`);
   console.log(`  kart on-screen failures: ${offScreen}, road-ahead misses: ${roadMiss}, camera-below-surface: ${buried}`);
+  console.log(`  road visible ahead: typical ${typicalAhead} m, worst frame ${worstAhead} m (${probes} probes)`);
   console.log(`  kart apparent height: min ${(worstSize * 100).toFixed(1)}%, max ${(bestSize * 100).toFixed(1)}% of viewport height`);
   for (const s of samples.slice(0, 5)) console.log(`  note t=${s.t}s: ${s.why}`);
 
@@ -169,6 +189,8 @@ function runTrack(def) {
   else ok('player kart stays inside every viewport');
   if (roadMiss > Math.floor(SECS / 2)) fail(`${roadMiss} frames where the road ahead was not in frame`);
   else ok('road ahead visible');
+  if (typicalAhead < 60) fail(`only ${typicalAhead} m of road ahead is in view in a typical frame — a player cannot plan a corner they cannot see`);
+  else ok(`road ahead in view: typical ${typicalAhead} m, worst ${worstAhead} m`);
   if (buried > 0) fail(`${buried} frames with the camera under the track surface`);
   else ok('camera stays above the surface');
   if (worstSize * 100 < 14) fail(`player kart drops to ${(worstSize * 100).toFixed(1)}% of the viewport height — camera too far back at speed`);

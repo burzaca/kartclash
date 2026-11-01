@@ -1,7 +1,7 @@
 /* main.js — KART CLASH boot, fixed-step loop, camera rig, split-screen orchestration. (PM-owned) */
 import * as THREE from 'three';
 
-import { GAME, RACE, CAM, KART, PLAYERS, AI_DRIVERS, KEYMAP, GLOBAL_KEYS, TRACKS, ITEM, RENDER } from './config.js';
+import { GAME, RACE, CAM, KART, PLAYERS, AI_DRIVERS, KEYMAP, GLOBAL_KEYS, TRACKS, ITEM, ITEM_NAME, KEYMAP_LABEL, RENDER } from './config.js';
 import { clamp, damp, lerp, mulberry32, hashSeed } from './foundation.js';
 import { buildTrack } from './core/track.js';
 import { createControllers } from './core/input.js';
@@ -45,6 +45,12 @@ function boot() {
   let paused = false, started = false;
   const rig = createCameraRig(THREE);
   const cams = rig.cams;                    // the rig owns these; the array identity stays valid
+
+  // Camera distance is the player's choice, kept between visits.
+  const CAM_PREF_KEY = '***';
+  const storedCam = (() => { try { return localStorage.getItem(CAM_PREF_KEY); } catch { return null; } })();
+  if (qs.get('cam')) rig.setPreset(qs.get('cam'));
+  else if (storedCam) rig.setPreset(storedCam);
 
   function buildWorld() {
     // tear down
@@ -121,6 +127,7 @@ function boot() {
       title: GAME.title, subtitle: TRACKS[trackIdx].name,
       tracks: TRACKS.map((t, i) => ({ name: t.name, selected: i === trackIdx })),
       players: PLAYERS.slice(0, humanCount).map((p) => ({ name: p.name, keys: p.keys, color: p.color })),
+      camera: rig.presetName(),
     };
   }
   function toTitle() {
@@ -150,8 +157,33 @@ function boot() {
   let last = performance.now(), acc = 0, fps = 60, frames = 0, fpsT = 0;
   window.__stats = { fps: 0, phase: 'title' };
 
+  // One RNG for the whole session. It used to be created INSIDE ctxOf() as mulberry32(1), so
+  // every physics step restarted the sequence at the same seed and every item box handed out the
+  // same item for a given running position — which is exactly what the player reported
+  // ("I keep getting the same pickup"). Pass ?seed=N to reproduce a session.
+  const sessionRng = mulberry32(qs.get('seed') ? Number(qs.get('seed')) : ((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0));
+  const taughtItemKey = new Set();     // humans who have been shown how to use an item, once
+  const toldHolding = new Set();
+
+  // the player's own key, spelled out — "press SPACE", not "press the use key"
+  function useKeyLabel(k) {
+    const km = KEYMAP_LABEL[k && k.spec && k.spec.keys] || KEYMAP_LABEL.arrows;
+    return km.use;
+  }
+
   function ctxOf() {
-    return { karts, track, items, fx, rng: mulberry32(1), time: race ? race.clock : 0 };
+    return {
+      karts, track, items, fx, rng: sessionRng, time: race ? race.clock : 0,
+      onBlocked: (k) => {
+        if (!k.human) return;
+        const pane = k.viewport ? k.viewport.i : 0;
+        hud.pulseItem(pane);
+        if (!toldHolding.has(k.id)) {
+          toldHolding.add(k.id);
+          hud.banner('ITEM ALREADY IN HAND', `use it first: press ${useKeyLabel(k)}`, 2000, pane);
+        }
+      },
+    };
   }
 
   function fixedStep(dt) {
@@ -172,7 +204,14 @@ function boot() {
     items.update(dt, ctx);
     for (const k of karts) {
       if (k.input.use) { items.use(k, ctx); k.input.use = false; }
-      if (!k.finished) items.collect(k, ctx);
+      if (!k.finished) {
+        const got = items.collect(k, ctx);
+        // the first item a human picks up teaches them what to do with it, in their own keys
+        if (got && k.human && !taughtItemKey.has(k.id)) {
+          taughtItemKey.add(k.id);
+          hud.banner(ITEM_NAME[got] || 'ITEM ACQUIRED', `press ${useKeyLabel(k)} to use it`, 2400, k.viewport ? k.viewport.i : 0);
+        }
+      }
     }
     items.applyHits(ctx);
     const wasPhase = race.phase;
@@ -309,10 +348,16 @@ function boot() {
   window.addEventListener('keydown', (e) => {
     // after the flag, Esc/Enter goes back to the title screen (it used to do nothing at all)
     if (started && race.phase === 'finished' && (e.code === 'Escape' || e.code === 'Enter')) { toTitle(); return; }
-    if (GLOBAL_KEYS.pause.includes(e.code)) { paused = !paused; if (paused) menu.showPause(); else menu.hidePause(); return; }
+    if (GLOBAL_KEYS.pause.includes(e.code)) { paused = !paused; if (paused) menu.showPause(menuInfo()); else menu.hidePause(); return; }
     if (GLOBAL_KEYS.restart.includes(e.code)) { if (started) { race.start(); hud.hideResults(); } return; }
     if (started && race.phase === 'finished' && e.code === 'Enter') { race.start(); hud.hideResults(); return; }
     if (!started && e.code === 'Enter') { startRace(); return; }
+    if (e.code === 'KeyC') {
+      const name = rig.nextPreset();
+      try { localStorage.setItem(CAM_PREF_KEY, name); } catch { /* private mode */ }
+      hud.banner(`CAMERA: ${name.toUpperCase()}`, rig.presetLabel(), 1500);
+      return;
+    }
     if (e.code === 'Tab') { e.preventDefault(); trackIdx = (trackIdx + 1) % TRACKS.length; if (!started) { buildWorld(); menu.showTitle(menuInfo()); } }
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   });

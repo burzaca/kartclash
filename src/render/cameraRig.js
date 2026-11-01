@@ -8,9 +8,33 @@ import { clamp, damp, lerp } from '../foundation.js';
 const KARTREF = KART.maxSpeed;
 
 export function createCameraRig(THREE) {
+  // The chase distance is the one camera number players disagree about, so it is a setting.
+  // `pose` holds the active chase numbers; setPreset switches between the measured presets in config.
+  // (It is NOT called P — fixedShot below already uses that name for its own helper.)
+  let presetName = 'normal';
+  let pose = { back: CAM.back, up: CAM.up, lead: CAM.lead };
+
   const rig = {
     cams: [],
     states: [],
+
+    setPreset(name) {
+      if (!CAM.presets || !CAM.presets[name]) { pose = { back: CAM.back, up: CAM.up, lead: CAM.lead }; presetName = 'normal'; return presetName; }
+      presetName = name;
+      const p = CAM.presets[name];
+      pose = { back: p.back, up: p.up, lead: p.lead };
+      return presetName;
+    },
+    presetName() { return presetName; },
+    nextPreset() {
+      const order = CAM.presetOrder || ['normal'];
+      const i = order.indexOf(presetName);
+      return rig.setPreset(order[(i + 1) % order.length]);
+    },
+    presetLabel() {
+      const labels = { close: 'CLOSE (behind the kart)', normal: 'NORMAL', far: 'FAR (see more of the track)' };
+      return labels[presetName] || presetName;
+    },
 
     addCamera() {
       const cam = new THREE.PerspectiveCamera(CAM.fov, 1, CAM.near, CAM.far);
@@ -34,11 +58,11 @@ export function createCameraRig(THREE) {
 
         // Chase distance grows a little with speed (to read the road ahead) but stays short: the
         // player's own kart must stay clearly visible. Enforced by tools/probe-camera.js.
-        const back = CAM.back + spd * CAM.speedPull + (k.boost.time > 0 ? CAM.boostPull : 0);
-        const up = CAM.up + spd * CAM.upPull;
+        const back = pose.back + spd * CAM.speedPull + (k.boost.time > 0 ? CAM.boostPull : 0);
+        const up = pose.up + spd * CAM.upPull;
         const px = k.pos.x - fx * back, pz = k.pos.z - fz * back;
         const py = track.surfaceY(px, pz) + up + k.air.y * 0.55;
-        const lx = k.pos.x + fx * CAM.lead, lz = k.pos.z + fz * CAM.lead;
+        const lx = k.pos.x + fx * pose.lead, lz = k.pos.z + fz * pose.lead;
         const ly = k.pos.y + 1.2 + k.air.y * 0.4;
 
         if (!st.init) { st.pos.set(px, py, pz); st.look.set(lx, ly, lz); st.init = true; }
@@ -84,7 +108,7 @@ export function createCameraRig(THREE) {
       else if (name === 'front') P(5.5, 1.6, 0, -4, 0.8, 0);
       else if (name === 'aerial') P(-14, 30, 0, 0, 0, 6);
       else if (name === 'drift') P(-6.5, 2.4, 5.5, -2, 0.6, 2);
-      else P(-CAM.back, CAM.up, 0, CAM.lead, 1.2, 0);
+      else P(-pose.back, pose.up, 0, pose.lead, 1.2, 0);
       cam.position.copy(st.pos);
       cam.lookAt(st.look);
       cam.fov = CAM.fov;

@@ -125,6 +125,15 @@ export const CAM = {
   // numbers are set by measurement, not taste. (An earlier version sat 11 m back and got further
   // back with speed; with the follow lag that put the camera ~19 m away and the kart read at 2%.)
   back: 9.2, up: 3.4, lead: 5.5,
+  // Camera distance is a matter of taste, and the player asked for the view "forward a bit" —
+  // so it is a control, not a guess. C cycles these in game; each one is measured by
+  // tools/probe-camera.js (the kart must stay a readable size, the road ahead in view).
+  presets: {
+    close: { back: 8.0, up: 3.0, lead: 4.8 },
+    normal: { back: 9.2, up: 3.4, lead: 5.5 },
+    far: { back: 12.5, up: 4.6, lead: 7.5 },
+  },
+  presetOrder: ['close', 'normal', 'far'],
   followRate: 12.0,                        // higher = less lag; lag is what makes the kart shrink
   fov: 64, fovBoost: 68, fovSpeed: 0.22,   // a big fov kick also shrinks the kart — kept small
   near: 0.5, far: 900,

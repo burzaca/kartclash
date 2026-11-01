@@ -194,6 +194,12 @@ export function createMenu(root, opts) {
     globalText.textContent = 'P or Esc pauses (the keys are shown again while paused). R restarts. Tab changes track. After the flag, Esc returns here.';
     legend.appendChild(globalHint);
     legend.appendChild(globalText);
+    const camHint = document.createElement('b');
+    camHint.textContent = 'CAMERA';
+    const camText = document.createElement('i');
+    camText.textContent = `C changes the chase distance (close / normal / far). Currently: ${(info && info.camera) || 'normal'}. Your choice is remembered on this device.`;
+    legend.appendChild(camHint);
+    legend.appendChild(camText);
     menuRoot.appendChild(legend);
 
     // button container
@@ -256,6 +262,11 @@ export function createMenu(root, opts) {
       keys.appendChild(span);
     });
     overlay.appendChild(keys);
+
+    const camLine = document.createElement('div');
+    camLine.className = 'kc-control';
+    camLine.textContent = `camera: ${lastInfo.camera || 'normal'} — press C to change`;
+    overlay.appendChild(camLine);
 
     const resumeBtn = document.createElement('button');
     resumeBtn.className = 'kc-btn';
@@ -338,8 +349,9 @@ export function createMenu(root, opts) {
       visibleMode = 'title';
     },
 
-    // showPause - pause overlay
-    showPause() {
+    // showPause - pause overlay (pass the current info so the camera setting shown is current)
+    showPause(info) {
+      if (info) lastInfo = info;
       visibleMode = 'pause';
       buildPause();
       const resumeBtn = menuRoot.querySelector('.kc-btn');

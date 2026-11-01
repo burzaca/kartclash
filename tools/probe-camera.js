@@ -24,6 +24,12 @@ const arg = (name, def) => {
   const f = argv.find((a) => a.startsWith(`--${name}=`));
   return f ? f.split('=')[1] : def;
 };
+
+// A verification gate has to be reproducible, and the rig's impact shake uses Math.random().
+// Swap in a seeded stream so two runs of this probe agree; the sim's own RNG is already seeded.
+const seeded = mulberry32(0xC0FFEE);
+Math.random = () => seeded();
+
 const trackId = arg('track', null);
 const SECS = parseFloat(arg('secs', '25'));
 const STEP = 1 / 60;

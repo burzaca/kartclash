@@ -82,12 +82,14 @@ export function createMenu(root, opts) {
     /* --- buttons ------------------------------------------------- */
     .kc-btn {
       font-family: system-ui, -apple-system, sans-serif;
-      font-size: calc(var(--kc-scale) * 1rem);
+      /* floors matter here: at 0.64 scale a 1rem font rendered at 10px and was unreadable */
+      font-size: max(15px, calc(var(--kc-scale) * 1rem));
       font-weight: 600;
-      padding: calc(var(--kc-scale) * 0.6rem) calc(var(--kc-scale) * 1.2rem);
-      margin: calc(var(--kc-scale) * 0.4rem) 0;
+      padding: max(8px, calc(var(--kc-scale) * 0.5rem)) max(20px, calc(var(--kc-scale) * 1.2rem));
+      margin: max(4px, calc(var(--kc-scale) * 0.3rem)) 0;
       border: none;
-      border-radius: calc(var(--kc-scale) * 0.5rem);
+      border-radius: 8px;
+      min-width: 200px;
       background: var(--kc-btn-bg, #222);
       color: #fff;
       cursor: pointer;
@@ -131,11 +133,13 @@ export function createMenu(root, opts) {
   let selectedIdx = 0;                // index among visible buttons
   let visibleMode = 'title';         // 'title'|'pause'|'controls'
   let flashTimer = null;
+  let lastInfo = { players: [] };    // the pause screen repeats the key map, so keep the last title info
 
   // ---- build the initial title DOM -----------------------------------
   function buildTitle(info) {
     // clear any previous content
     menuRoot.innerHTML = '';
+    lastInfo = info || lastInfo;
 
     const title = document.createElement('h1');
     title.className = 'kc-title';
@@ -234,6 +238,17 @@ export function createMenu(root, opts) {
     title.className = 'kc-title';
     title.textContent = 'PAUSED';
     overlay.appendChild(title);
+
+    // a pause is the natural moment to re-read the keys, so show them here too
+    const keys = document.createElement('div');
+    keys.className = 'kc-control';
+    (lastInfo.players || []).forEach((p, pi) => {
+      const km = KEYMAP_LABEL[p.keys] || KEYMAP_LABEL.arrows;
+      const span = document.createElement('span');
+      span.textContent = `${p.name}: drive ${km.up}${km.down}${km.left}${km.right}  drift ${km.drift}  use item ${km.use}`;
+      keys.appendChild(span);
+    });
+    overlay.appendChild(keys);
 
     const resumeBtn = document.createElement('button');
     resumeBtn.className = 'kc-btn';

@@ -8,34 +8,9 @@ import assert from 'node:assert/strict';
 import { createHUD } from '../src/ui/hud.js';
 import { hudLayout, overlaps } from '../src/ui/hudLayout.js';
 import { ITEM, ITEM_NAME } from '../src/config.js';
+import { El, installDom, byClass } from './dom_stub.js';
 
-// ---- minimal DOM ------------------------------------------------------
-class El {
-  constructor(tag, ns) { this.tagName = tag; this.ns = ns || null; this.children = []; this.attrs = {}; this.dataset = {}; this._text = ''; this._html = ''; }
-  get style() { if (!this._style) { const s = {}; Object.defineProperty(s, 'setProperty', { value: (k, v) => { s[k] = String(v); }, enumerable: false }); this._style = s; } return this._style; }
-  get classList() {
-    if (!this._cls) { const set = new Set(); this._cls = { add: (c) => set.add(c), remove: (c) => set.delete(c), contains: (c) => set.has(c), toggle: (c, on) => { if (on === undefined) on = !set.has(c); if (on) set.add(c); else set.delete(c); return on; } }; }
-    return this._cls;
-  }
-  appendChild(c) { this.children.push(c); c.parent = this; return c; }
-  removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); return c; }
-  get firstChild() { return this.children[0] || null; }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  // the module assigns `el.className = 'kc-item'` — the stub must treat that as a class list,
-  // otherwise the tests cannot find the elements the real code created
-  set className(v) { this._cn = String(v); for (const c of String(v).split(/\s+/).filter(Boolean)) this.classList.add(c); }
-  get className() { return this._cn || ''; }
-  get textContent() { return this._text; }
-  set textContent(v) { this._text = String(v); this.children = []; }
-  set innerHTML(v) { this._html = String(v); }
-  get innerHTML() { return this._html; }
-  getContext() { return new Proxy({}, { get: () => () => ({}) }); }
-}
-global.document = { createElement: (t) => new El(t), createElementNS: (ns, t) => new El(t, ns) };
-
-// ---- find the HUD elements the module created ------------------------
-function flatten(node, out = []) { out.push(node); for (const c of node.children) flatten(c, out); return out; }
-function byClass(root, cls) { return flatten(root).filter((n) => n._cls && n._cls.contains(cls)); }
+installDom();
 
 function makeHUD(w, h) {
   const root = new El('div');

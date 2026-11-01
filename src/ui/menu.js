@@ -63,7 +63,7 @@ export function createMenu(root, opts) {
       text-align: center;
       margin-bottom: 0.5rem;
     }
-    .kc-control span { display: inline-block; margin-right: 0.7rem; }
+    .kc-control span { display: block; margin: 1px 0; }
 
     /* --- what each pickup does: a first-time player should not have to guess -- */
     .kc-legend {

@@ -1,0 +1,38 @@
+Project: /home/hermes/projects/kartclash — a three.js arcade kart racer (Mario-Kart-style) with 2-player split screen.
+
+FIRST read these two files in full, they are the contract and the tuning source of truth:
+- /home/hermes/projects/kartclash/docs/INTERFACES.md  (sections 0, 1, 2 are yours; read 0 in full)
+- /home/hermes/projects/kartclash/src/config.js  (KART, RACE, ITEMS, CAM knob objects)
+- /home/hermes/projects/kartclash/src/foundation.js  (use its math and RNG, do not reimplement)
+
+WRITE THESE FILES COMPLETELY, before anything else:
+1. /home/hermes/projects/kartclash/src/core/input.js        — section 2, createControllers
+2. /home/hermes/projects/kartclash/src/core/kart.js         — section 2, createKart / stepKart / resolveKartCollisions / recoverKart / resetKart
+3. /home/hermes/projects/kartclash/tests/test_kart.test.js  — the assertions listed at the end of section 2, plus more
+
+This is the most important module in the game: the driving feel. Implement the physics exactly as the
+physics spec in section 2 describes: arcade model where speed is a signed scalar along the heading,
+velocity converges to forward*speed through the grip constant (that is what produces the slide), and
+the drift/mini-turbo charge chain (hop on drift start, tier timers from KART.driftCharge, boost on
+release from KART.driftBoost and KART.driftBoostTime). Wall containment comes from track.sample()
+returning side and half: clamp the kart to the road, reflect outward velocity, cut forward speed.
+Off-road lowers the speed cap and grip. Airborne reduces steering. Also write the visual state the
+renderer needs: lean, wheelSpin, steerVis, fx.boost, fx.spark, fx.shake, hitFlash, wallHit, and keep
+kart.plIdx untouched (the PM owns lap progress). Guard every fx call (fx may be undefined in tests).
+Everything reads its numbers from KART and ITEMS in config.js — no invented constants for anything
+that already has a knob.
+
+The kart state object returned by createKart must match section 0 EXACTLY, field for field, because
+three other workers and the PM code write it.
+
+Do NOT touch any other file. Pure ESM, no DOM at import time, no THREE import.
+
+VERIFY, then fix until green, and paste the result in your report:
+  cd /home/hermes/projects/kartclash
+  node --check src/core/input.js
+  node --test tests/test_kart.test.js
+Add an assertion proving the kart cannot exceed its configured top speed over 60 simulated seconds and
+one proving a full lap walk around a real track would not be needed — keep tests to the fake track.
+
+Report the file paths and the word DONE, plus a one-paragraph description of the drift chain timing
+you implemented and any place where you had to interpret the contract.

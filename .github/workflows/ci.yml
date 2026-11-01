@@ -1,0 +1,40 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # three.js is vendored in vendor/, so there is no npm install anywhere in this pipeline.
+      - name: Syntax check every module
+        run: npm run check
+      - name: Unit + contract tests
+        run: npm test
+      - name: Headless race pacing (both tracks)
+        run: npm run sim -- --all --laps=2
+      - name: Rendered-geometry audit (no GPU)
+        run: npm run smoke:render
+      - name: Split-screen camera framing (both tracks)
+        run: npm run probe:camera
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4

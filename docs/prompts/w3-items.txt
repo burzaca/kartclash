@@ -1,0 +1,40 @@
+Project: /home/hermes/projects/kartclash — a three.js arcade kart racer (Mario-Kart-style) with 2-player split screen.
+
+FIRST read in full:
+- /home/hermes/projects/kartclash/docs/INTERFACES.md  (section 3 is yours; read section 0 for the kart state you mutate, and section 1 for the track queries)
+- /home/hermes/projects/kartclash/src/config.js       (ITEM, ITEM_TABLE, tableForPlace, ITEM_TRIPLE, ITEM_COUNT, ITEMS, KART)
+- /home/hermes/projects/kartclash/src/foundation.js   (rng helpers, math)
+
+WRITE THESE FILES COMPLETELY, before anything else:
+1. /home/hermes/projects/kartclash/src/core/items.js        — section 3, export function createItemSystem(track, rng)
+2. /home/hermes/projects/kartclash/tests/test_items.test.js — the assertions at the end of section 3
+
+This module implements game RULES, so follow the behaviour rules in section 3 exactly — every item,
+every timer, every stack rule, and the exact effect-object shape (the renderer reads effects, so a
+field you rename silently breaks the game). Item boxes are static world positions taken from
+track.itemNodes; they go inactive when taken and come back after ITEMS.boxRespawn. Shells must stay
+on the road: use track.sample(x, z, hint) to steer the projectile along the centreline, bounce off the
+walls with ITEMS.shell.bounce, and end the effect's life when it hits a wall. Red shells home onto the
+nearest rival AHEAD of the owner within ITEMS.redHomingRadius — determine ahead-ness with the track
+index (advanceIdx / idxDelta from foundation), not with a dot product, because the circuit loops.
+
+A hit writes state onto the victim kart exactly as described: spin, speed cut, hitFlash, fx shake, and
+fx calls (guard fx — it may be undefined in tests). STAR victims are immune to spin-outs and instead
+destroy the shell. Triples decrement through ITEM_COUNT and ITEM_TRIPLE and can never go below zero.
+Lightning affects every other racer, with a stronger version when the gap is large. The fake item
+(cloud) makes the holder invisible and drops bananas behind them. The star grants a timed speed boost,
+immunity, and drops harmless bananas behind the holder.
+
+Note: another worker is writing src/core/kart.js at the same time as you. If it does not exist yet,
+do NOT import it: define a local makeTestKart(...) helper inside your test file that produces exactly
+the section 0 shape. Do not create src/core/kart.js yourself.
+
+Pure ESM: no DOM, no THREE. Do NOT touch any other file. Verify, fix until green, paste the output:
+  cd /home/hermes/projects/kartclash
+  node --check src/core/items.js
+  node --test tests/test_items.test.js
+In your test, draw 200 items for place 1 and for the last place and assert the difference in the
+weighted table (that is the core of a Mario-Kart item box: the back of the pack gets the good stuff).
+
+Report the file paths and the word DONE, plus the list of item behaviours you implemented and the one
+test result summary, and flag anything in the contract you had to interpret.

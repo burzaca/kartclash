@@ -1,0 +1,56 @@
+Project: /home/hermes/projects/kartclash — a three.js arcade kart racer (Mario-Kart-style) with 2-player split screen, no external assets.
+
+FIRST read in full:
+- /home/hermes/projects/kartclash/docs/INTERFACES.md   (section 5 is yours; read section 0 too)
+- /home/hermes/projects/kartclash/src/config.js        (GAME, RACE, PLAYERS, KEYMAP_LABEL, ITEM, ITEM_NAME, formatTime lives in foundation.js)
+- /home/hermes/projects/kartclash/src/foundation.js    (formatTime, formatGap, clamp, lerp)
+
+WRITE THESE TWO FILES COMPLETELY, before anything else:
+1. /home/hermes/projects/kartclash/src/ui/hud.js    — export function createHUD(root, racerSpecs, opts)
+2. /home/hermes/projects/kartclash/src/ui/menu.js   — export function createMenu(root, opts)
+
+Follow the exact API in section 5 — main.js is written against it and cannot be changed.
+The HUD must be built for SPLIT SCREEN: one fully independent HUD per viewport, positioned by
+setViewport(i, {x,y,w,h}) in canvas pixels measured from the top of the canvas. Every element must be
+absolutely positioned inside its own viewport container and scale with the viewport size (use a CSS
+custom property for the scale that update() sets, so nothing is hardcoded to full-screen px).
+pointer-events: none on everything. Class names prefixed kc-. All CSS in one template string injected
+into a single style element by the module — no external stylesheet, no images, no webfonts, no
+framework, no build step.
+
+The HUD per player must contain, in a designed arcade layout (not a plain text dump):
+ - big position badge (1st / 2nd / 3rd ...) with the racer colour,
+ - lap counter x/3,
+ - an item slot: a rounded box with the item drawn procedurally — build inline SVG for mushroom,
+   triple stacks, green shell, red shell, banana, fake item (question box), lightning and star. They
+   must be recognisable silhouettes, colour-coded, and show the stack count for triples,
+ - a speed readout in km/h with an SVG/canvas gauge arc that fills with speed,
+ - a minimap: a 2D canvas drawing the track outline from setTrack() plus one dot per racer (your own
+   dot larger, with a heading arrow), and a start-line tick,
+ - time, last lap, best lap, and the gap to the leader for each racer in a compact standings strip,
+ - state reactions: off-road dim, spin-out wobble, invisible = translucent nameplate, star = rainbow.
+banner(text, sub, dur) draws the big centre text (3, 2, 1, GO, LAP 1/3, final lap), flash(color) a
+full-viewport colour flash, results(rows) a designed standings panel, setStatus(text) a small line for
+debug/status. update(view) is called every animation frame — it must not rebuild DOM, only patch text
+and styles it already created, and it must be cheap (no innerHTML per frame).
+
+menu.js: title screen with the game title and subtitle, the selected track name, both players control
+maps taken from KEYMAP_LABEL, and the buttons (start 2P, start 1P, switch track, restart). Also
+showPause / showControls / results-adjacent overlays and keyboard handling (arrows/WASD move the
+selection, Enter activates) reporting through onAction. Make it look like an arcade poster: heavy
+display type from the system-ui stack, diagonal colour bands, glow, the player colours, and a clear
+focus ring — designed, not default browser controls.
+
+You cannot open a browser; the PM checks layout in a real one. So: use simple, obvious structure
+(one container per viewport, one row per element), avoid clever CSS tricks that silently break, and put
+a short comment block at the top of each file describing the DOM tree you build.
+
+Pure DOM, no THREE import, no network. Do NOT touch any other file. Verify and paste the output:
+  cd /home/hermes/projects/kartclash
+  node --check src/ui/hud.js
+  node --check src/ui/menu.js
+Then list every exported function and every DOM element class you create, and confirm each name in the
+section 5 API is implemented (setTrack, setViewport, update, banner, flash, results, hideResults,
+setStatus, dispose / showTitle, hide, showPause, hidePause, showControls, hideControls, onAction).
+
+Report the file paths and the word DONE.

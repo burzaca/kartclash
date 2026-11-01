@@ -1,0 +1,42 @@
+Project: /home/hermes/projects/kartclash — a three.js arcade kart racer (Mario-Kart-style) with 2-player split screen.
+
+FIRST read in full:
+- /home/hermes/projects/kartclash/docs/INTERFACES.md   (sections 0, 1 and 1b are yours; read 0 anyway)
+- /home/hermes/projects/kartclash/src/config.js        (TRACKS array with authored control points, RACE, KART)
+- /home/hermes/projects/kartclash/src/foundation.js    (buildPolyline, nearestOnPolyline, frameAt, advanceIdx, mulberry32 — use them)
+
+WRITE THESE FILES COMPLETELY, before anything else:
+1. /home/hermes/projects/kartclash/src/core/track.js       — section 1, export function buildTrack(def)
+2. /home/hermes/projects/kartclash/src/render/trackMesh.js — section 1b, export function buildTrackScene(THREE, track, theme)
+3. /home/hermes/projects/kartclash/tests/test_track.test.js — the assertions listed at the end of section 1
+
+The track module must be PURE (no THREE import, no DOM) — it answers queries only:
+sample / halfWidth / surfaceY / progressOf / checkpoints / gridSlot / itemNodes / pads / decor /
+bounds / minimap, with the exact return shapes shown in section 1. sample() is called about fifty times
+per frame by physics and items, so use the hint index (nearestOnPolyline with a window) and keep it
+free of allocation-heavy work where you can.
+
+Elevation: surfaceY comes from def.elev (amp, waves, phase) sampled by lap fraction — smooth, gentle,
+and consistent: a kart resting on the surface at any x,z must get exactly surfaceY(x,z). slopeX/slopeZ
+by finite difference. The renderer lifts the road ribbon by surfaceY so the road and the surface query
+never disagree — that is important, a mismatch would make karts hover or sink.
+
+The mesh side is where the game looks like a real kart racer, so make it look designed:
+road ribbon with vertex colours (asphalt with a subtly darker racing line, a white-and-black checkered
+start/finish band, glowing chevron boost pads), red/white kerb blocks along the corner edges, a solid
+low barrier with posts along both edges (it must read as a wall you bounce off), grass ground with
+mottled vertex colour, and the props from track.decor as InstancedMesh groups (one per kind) using
+instanceColor: trees (trunk + a lathed or icosahedron canopy), rocks, bushes, cone stacks, tyre
+stacks, lamp posts, flag banners on poles, a grandstand with rows of seats near the start, a start/
+finish gantry arch over the road, and a few sponsor billboards. No flatShading anywhere. No texture
+files, no external assets. Segment counts high enough that nothing looks like a toy block.
+
+Do NOT touch any other file. Verify, fix until green, and paste the output in your report:
+  cd /home/hermes/projects/kartclash
+  node --check src/render/trackMesh.js
+  node --test tests/test_track.test.js
+Also print, from a small script inside your test, the produced track total length and the decor count
+per kind so the PM can see the shape of the circuit, and assert on both tracks in TRACKS.
+
+Report the file paths and the word DONE, plus: the circuit length, how many decor items per kind, and
+how you built the ribbon and the barriers.

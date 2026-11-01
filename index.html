@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>KART CLASH — arcade kart racing</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23d8232a'/><rect x='4' y='14' width='24' height='8' rx='2' fill='%23fff'/><circle cx='9' cy='24' r='4' fill='%23111'/><circle cx='23' cy='24' r='4' fill='%23111'/></svg>">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0b1020; overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; }
+  #game { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  #ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  #brand { position: fixed; left: 12px; bottom: 10px; font: 700 11px/1.4 system-ui; letter-spacing: .18em;
+    color: rgba(255,255,255,.35); z-index: 11; pointer-events: none; }
+  #loader { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px;
+    background: radial-gradient(120% 90% at 50% 10%, #1b3a6b 0%, #070b16 70%); z-index: 40;
+    transition: opacity .5s ease; text-align: center; }
+  #loader.gone { opacity: 0; pointer-events: none; }
+  #loader h1 { font-size: 40px; letter-spacing: .14em; margin: 0;
+    background: linear-gradient(92deg, #ffd166, #ff5d5d 45%, #59c2ff); -webkit-background-clip: text;
+    background-clip: text; color: transparent; text-shadow: 0 0 40px rgba(255,120,60,.15); }
+  #loader p { margin: 0; opacity: .55; font-size: 13px; letter-spacing: .2em; }
+  .bar { width: 260px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 30%; background: linear-gradient(90deg, #ffd166, #ff5d5d);
+    animation: slide 1.1s infinite ease-in-out; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<div id="brand">KART CLASH · three.js r186 · no assets, all procedural</div>
+<div id="loader"><h1>KART CLASH</h1><p>LOADING ENGINE</p><div class="bar"><i></i></div></div>
+<noscript><p style="padding:2rem">This game needs JavaScript and WebGL.</p></noscript>
+<script type="module">
+  // any runtime error is recorded, not swallowed — a blank canvas must never look like a rendered game
+  window.__errs = [];
+  window.addEventListener('error', (e) => window.__errs.push(String(e.message || e.error)));
+  window.addEventListener('unhandledrejection', (e) => window.__errs.push('promise: ' + String(e.reason)));
+  import './src/main.js';
+  // veil lifts only after the engine reports a live frame — a silent boot failure must stay visible
+  const hide = () => {
+    if (window.__bootErr) return;
+    const l = document.getElementById('loader');
+    if (l) { l.classList.add('gone'); setTimeout(() => l.remove(), 600); }
+  };
+  const wait = () => {
+    if (window.__bootErr) {
+      const l = document.getElementById('loader');
+      if (l) l.innerHTML = '<h1 style="color:#fff;background:none">BOOT FAILED</h1><pre style="max-width:80vw;overflow:auto;color:#f88;font-size:12px">' + window.__bootErr + '</pre>';
+      return;
+    }
+    if (window.__game) { hide(); return; }
+    requestAnimationFrame(wait);
+  };
+  requestAnimationFrame(wait);
+</script>
+</body>
+</html>

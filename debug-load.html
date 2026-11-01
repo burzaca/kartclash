@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>probe</title>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<pre id="out">probing…</pre>
+<script type="module">
+  const out = document.getElementById('out');
+  const report = (label, e) => { out.textContent += '\n' + label + ': ' + (e && (e.message || e)) + '\n' + (e && e.stack ? e.stack.split('\n').slice(0,6).join('\n') : ''); document.title = 'FAIL ' + label; };
+  try {
+    const THREE = await import('three');
+    out.textContent += '\nthree r' + THREE.REVISION + ' ok';
+  } catch (e) { report('three import', e); }
+  for (const m of ['./src/core/track.js','./src/core/kart.js','./src/core/items.js','./src/core/race.js','./src/core/ai.js','./src/render/stage.js','./src/render/trackMesh.js','./src/render/kartModel.js','./src/render/fx.js','./src/ui/hud.js','./src/ui/menu.js','./src/main.js']) {
+    try { await import(m); out.textContent += '\n' + m + ' ok'; } catch (e) { report(m, e); }
+  }
+  if (document.title === 'probe') document.title = 'ALL-OK';
+</script>
+</body>
+</html>

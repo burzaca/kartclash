@@ -1,0 +1,50 @@
+Project: /home/hermes/projects/kartclash — a three.js arcade kart racer (Mario-Kart-style) with 2-player split screen, no external assets.
+
+FIRST read in full:
+- /home/hermes/projects/kartclash/docs/INTERFACES.md   (sections 0, 3, 4 and 4c — you own sections 4 and 4c)
+- /home/hermes/projects/kartclash/src/config.js        (PLAYERS, AI_DRIVERS colour specs, KART, ITEM ids)
+
+WRITE THESE TWO FILES COMPLETELY, before anything else:
+1. /home/hermes/projects/kartclash/src/render/kartModel.js  — buildKartModel, updateKartModel, buildItemProps, setHeldItem
+2. /home/hermes/projects/kartclash/src/render/fx.js         — createFX with burst / trail / ring / confetti / update / reset / dispose
+
+You cannot open a browser, so the PM will judge the look. Compensate by following the proven look
+recipe EXACTLY — this is the difference between a polished game and a toy-block game:
+  - NEVER set flatShading true on any material. Use high segment counts: SphereGeometry 24-32 segments,
+    LatheGeometry 20-24 profile points, TorusGeometry 24x12 or better.
+  - Build the body, chassis and the driver from LATHE profiles (a stack of radius/height points) and
+    rounded boxes — not from stacked cubes or capsules. A kart chassis that tapers, a helmet that
+    curves, a driver torso that rounds off.
+  - Details do more than polygons: helmet visor stripe, number plate on the nose, a spoiler, exhaust
+    pipes, seat belt straps, wheel rims with a hub, steering wheel. Give the driver visible arms on the
+    wheel and legs on the footwell.
+  - Colours come from the spec object passed in (color, trim, skin, helmet) so the six racers look
+    like six different characters. Use MeshStandardMaterial with sensible roughness/metalness; no
+    textures, no images, no external files of any kind.
+  - Author every model facing LOCAL +Z (nose at +Z, face at +Z, left side at -X) because the
+    orientation formula in section 4 is fixed: group.rotation.y = Math.PI/2 - kart.heading.
+  - Set castShadow / receiveShadow on the kart parts, and keep the whole kart within roughly a 2.2 m
+    radius and 1.6 m tall so the chase camera framing works.
+
+updateKartModel(group, kart, dt) is called every animation frame for every racer: it must apply the
+visual state the physics writes (see section 0: kart.lean, wheelSpin, steerVis, boost.time,
+drift.tier, star, invisible, shrunk, spin, air.y, hitFlash) and animate the wheels, the flame, the
+shield, the wobble, the scale and the transparency. Do not allocate new objects inside it — do all
+allocation once at build time and only mutate transforms/materials per frame.
+
+createFX is a single pooled particle system: one InstancedMesh of capacity at least 1500, a free list,
+no allocation in update(dt), instances hidden by scaling to zero. It has to survive several racers
+drifting and boosting at the same time at 60 fps. Colour per instance via instanceColor. Additive
+blending for boost flame and sparks, opaque for dust and confetti.
+
+Pure browser modules: they receive THREE as a parameter, so do NOT import three anywhere in your files.
+Do NOT touch any other file. Verify and paste the output:
+  cd /home/hermes/projects/kartclash
+  node --check src/render/kartModel.js
+  node --check src/render/fx.js
+Then re-read both files looking for any identifier you referenced but never defined — a missing function
+costs the PM a whole build cycle, and a file that only compiles but has no real geometry is worthless.
+Count your exported functions and list, in the report, every geometry constructor you used per part, so
+the PM can see the model is actually built and not stubbed.
+
+Report the file paths and the word DONE.

@@ -1,0 +1,19 @@
+{
+  "name": "kartclash",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "KART CLASH \u2014 a three.js arcade kart racer with 2-player split screen (Mario-Kart-style).",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "sim": "node tools/simulate.js",
+    "check": "for f in src/*.js src/core/*.js src/render/*.js src/ui/*.js; do node --check $f || exit 1; done; echo CHECK-OK",
+    "serve": "python3 -m http.server 8098",
+    "probe:camera": "node tools/probe-camera.js",
+    "smoke:render": "node tools/smoke-render.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.186.1"
+  }
+}

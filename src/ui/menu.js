@@ -148,7 +148,8 @@ export function createMenu(root, opts) {
 
     const subtitle = document.createElement('p');
     subtitle.className = 'kc-subtitle';
-    subtitle.textContent = info.subtitle || 'GOLD CUP -- MUSHROOM CIRCUIT';
+    const build = (info && info.build) ? ` · build ${info.build}` : '';
+    subtitle.textContent = (info.subtitle || 'GOLD CUP -- MUSHROOM CIRCUIT') + build;
     menuRoot.appendChild(subtitle);
 
     // track name

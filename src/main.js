@@ -124,7 +124,7 @@ function boot() {
   // ---------- menus ----------
   function menuInfo() {
     return {
-      title: GAME.title, subtitle: TRACKS[trackIdx].name,
+      title: GAME.title, subtitle: TRACKS[trackIdx].name, build: GAME.build,
       tracks: TRACKS.map((t, i) => ({ name: t.name, selected: i === trackIdx })),
       players: PLAYERS.slice(0, humanCount).map((p) => ({ name: p.name, keys: p.keys, color: p.color })),
       camera: rig.presetName(),
@@ -374,6 +374,11 @@ function boot() {
     else if (a === 'switch' || a === 'next') { trackIdx = (trackIdx + 1) % TRACKS.length; buildWorld(); menu.showTitle(menuInfo()); }
   });
   menu.showTitle(menuInfo());
+  // the corner stamp exists so a player and I can agree on which build they are looking at
+  {
+    const brand = document.getElementById('brand');
+    if (brand) brand.textContent = `${GAME.title} · three.js r${THREE.REVISION} · build ${GAME.build}`;
+  }
   if (allAI) { startRace(); menu.hide(); }   // hands-off smoke run for the browser harness
   requestAnimationFrame(frame);
   let pumpNow = performance.now();

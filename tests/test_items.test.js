@@ -451,3 +451,23 @@ test('works on the minimal section-2 fake track (single-point polyline, no homin
   assert.equal(items.effects[0].homing, null);
   assert.ok(run(items, { karts: [me, rival] }, 1, () => rival.spin > 0), 'straight shell still hits');
 });
+
+test('one RNG stream gives a variety of items at the same running position', () => {
+  // The player's report was "I keep getting the same pickup". The cause was upstream (the game
+  // loop re-seeded the RNG every physics step), but this is the behaviour that must hold: with a
+  // single stream, repeated boxes for the same place are not all the same item.
+  const track = makeLoopTrack();
+  const items = createItemSystem(track, mulberry32(99));
+  const k = place(track, makeTestKart(0), 30);
+  k.place = 4;
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) {
+    const b = items.boxes[i % items.boxes.length];
+    k.pos.x = b.x; k.pos.z = b.z;
+    k.item = 0; k.count = 0;
+    const id = items.collect(k, { karts: [k] });
+    if (id) seen.add(id);
+    items.update(ITEMS.boxRespawn + 0.01, { karts: [k] });
+  }
+  assert.ok(seen.size >= 3, `only ${seen.size} distinct items over 40 boxes — the roll is stuck`);
+});

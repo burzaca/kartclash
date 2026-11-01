@@ -59,7 +59,7 @@ export function createMenu(root, opts) {
     /* --- control map display ------------------------------------ */
     .kc-control {
       font-family: system-ui, -apple-system, sans-serif;
-      font-size: max(11px, calc(var(--kc-scale) * 0.8rem));
+      font-size: max(13px, calc(var(--kc-scale) * 0.8rem));
       text-align: center;
       margin-bottom: 0.5rem;
     }
@@ -73,7 +73,7 @@ export function createMenu(root, opts) {
       max-width: min(94vw, 60rem);
       margin: 0.3rem auto 0.7rem;
       font-family: system-ui, -apple-system, sans-serif;
-      font-size: max(11px, calc(var(--kc-scale) * 0.8rem));
+      font-size: max(13px, calc(var(--kc-scale) * 0.8rem));
       line-height: 1.35;
     }
     .kc-legend b { font-weight: 700; color: #fff; white-space: nowrap; }
@@ -165,7 +165,8 @@ export function createMenu(root, opts) {
     info.players.forEach((p, pi) => {
       const km = KEYMAP_LABEL[p.keys] || KEYMAP_LABEL.arrows; // fallback
       const span = document.createElement('span');
-      span.textContent = `${p.name}: ↑${km.up} ↓${km.down} ←${km.left} →${km.right} drift${km.drift} use${km.use}`;
+      // label the VALUES, not decorate them: prefixing arrows made P2 read as "↑↑ ↓↓ ←← →→"
+      span.textContent = `${p.name}: drive ${km.up} ${km.down} ${km.left} ${km.right}  ·  drift ${km.drift}  ·  use item ${km.use}`;
       controlsDiv.appendChild(span);
     });
     menuRoot.appendChild(controlsDiv);
@@ -184,9 +185,15 @@ export function createMenu(root, opts) {
     const useHint = document.createElement('b');
     useHint.textContent = 'USING AN ITEM';
     const hintText = document.createElement('i');
-    hintText.textContent = 'Drive over a glowing box to take an item, then press your USE key to fire it. Press during the countdown to launch a mushroom early.';
+    hintText.textContent = 'Drive over a glowing box to take an item, then press your USE key to fire it. You can hold an item through the countdown and fire it as the field starts.';
     legend.appendChild(useHint);
     legend.appendChild(hintText);
+    const globalHint = document.createElement('b');
+    globalHint.textContent = 'PAUSE / TRACK';
+    const globalText = document.createElement('i');
+    globalText.textContent = 'P or Esc pauses (the keys are shown again while paused). R restarts. Tab changes track. After the flag, Esc returns here.';
+    legend.appendChild(globalHint);
+    legend.appendChild(globalText);
     menuRoot.appendChild(legend);
 
     // button container
@@ -245,7 +252,7 @@ export function createMenu(root, opts) {
     (lastInfo.players || []).forEach((p, pi) => {
       const km = KEYMAP_LABEL[p.keys] || KEYMAP_LABEL.arrows;
       const span = document.createElement('span');
-      span.textContent = `${p.name}: drive ${km.up}${km.down}${km.left}${km.right}  drift ${km.drift}  use item ${km.use}`;
+      span.textContent = `${p.name}: drive ${km.up} ${km.down} ${km.left} ${km.right}  ·  drift ${km.drift}  ·  use item ${km.use}`;
       keys.appendChild(span);
     });
     overlay.appendChild(keys);

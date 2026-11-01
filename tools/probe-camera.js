@@ -140,11 +140,13 @@ function runTrack(def) {
       const inY = Math.max(...ys) < 0.95 && Math.min(...ys) > -0.95;
       if (!inX || !inY) offScreen++;
 
-      // apparent height as a fraction of the viewport (NDC spans 2 units vertically)
+      // apparent height as a fraction of the viewport (NDC spans 2 units vertically).
+      // A chase camera that renders the player's kart under ~14% of its half-pane is too far back
+      // — that was the "with speed the kart gets too far away" report.
       const h = (Math.max(...ys) - Math.min(...ys)) / 2;
       const dist = cam.position.distanceTo(mdl.position);
-      if (h < 0.04) samples.push({ t: +race.clock.toFixed(1), why: `kart ${(h * 100).toFixed(1)}% of frame height (cam dist ${dist.toFixed(1)} m, kart speed ${k.speed.toFixed(1)} m/s, lap ${k.lap})` });
-      if (h > 0.6) samples.push({ t: +race.clock.toFixed(1), why: `kart fills the frame: ${(h * 100).toFixed(1)}%` });
+      if (h < 0.14) samples.push({ t: +race.clock.toFixed(1), why: `kart only ${(h * 100).toFixed(1)}% of frame height (cam ${dist.toFixed(1)} m away, kart ${k.speed.toFixed(1)} m/s)` });
+      if (h > 0.34) samples.push({ t: +race.clock.toFixed(1), why: `kart fills ${(h * 100).toFixed(1)}% of the frame — camera too close` });
       worstSize = Math.min(worstSize, h); bestSize = Math.max(bestSize, h);
 
       // the road ahead must be in frame — a chase cam that only shows sky is useless
@@ -169,9 +171,9 @@ function runTrack(def) {
   else ok('road ahead visible');
   if (buried > 0) fail(`${buried} frames with the camera under the track surface`);
   else ok('camera stays above the surface');
-  if (worstSize * 100 < 4) fail('kart too small on screen');
-  else if (bestSize * 100 > 60) fail('kart too large on screen');
-  else ok('kart reads at a sane size');
+  if (worstSize * 100 < 14) fail(`player kart drops to ${(worstSize * 100).toFixed(1)}% of the viewport height — camera too far back at speed`);
+  else if (bestSize * 100 > 34) fail(`player kart reaches ${(bestSize * 100).toFixed(1)}% of the viewport — camera too close`);
+  else ok(`kart reads ${(worstSize * 100).toFixed(0)}-${(bestSize * 100).toFixed(0)}% of its viewport`);
 }
 
 const defs = trackId ? TRACKS.filter((t) => t.id === trackId) : TRACKS;

@@ -32,10 +32,10 @@ export function createCameraRig(THREE) {
         const fx = Math.cos(k.heading), fz = Math.sin(k.heading);
         const spd = clamp(Math.abs(k.speed) / KARTREF, 0, 1);
 
-        // Chase distance grows with speed: close and low when slow, back and high when fast.
-        // That is what makes speed readable on screen; it is the single most important feel knob.
-        const back = CAM.back + spd * 3.2 + (k.boost.time > 0 ? 1.2 : 0);
-        const up = CAM.up + spd * 0.9;
+        // Chase distance grows a little with speed (to read the road ahead) but stays short: the
+        // player's own kart must stay clearly visible. Enforced by tools/probe-camera.js.
+        const back = CAM.back + spd * CAM.speedPull + (k.boost.time > 0 ? CAM.boostPull : 0);
+        const up = CAM.up + spd * CAM.upPull;
         const px = k.pos.x - fx * back, pz = k.pos.z - fz * back;
         const py = track.surfaceY(px, pz) + up + k.air.y * 0.55;
         const lx = k.pos.x + fx * CAM.lead, lz = k.pos.z + fz * CAM.lead;

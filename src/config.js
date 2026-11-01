@@ -29,6 +29,17 @@ export const ITEM_TRIPLE = {
   [ITEM.TRIPLE_MUSHROOM]: ITEM.MUSHROOM, [ITEM.TRIPLE_GREEN]: ITEM.GREEN_SHELL,
   [ITEM.TRIPLE_RED]: ITEM.RED_SHELL, [ITEM.TRIPLE_BANANA]: ITEM.BANANA,
 };
+// Plain-language effects, shown in the title-screen legend so a first-time player knows what a
+// pickup does BEFORE they have to guess it mid-race.
+export const ITEM_DESC = {
+  [ITEM.MUSHROOM]: 'A burst of speed. Tap the use key and go.',
+  [ITEM.GREEN_SHELL]: 'Rolls forward in a straight line and knocks out whoever touches it.',
+  [ITEM.RED_SHELL]: 'Seeks out the racer just ahead of you and hits them.',
+  [ITEM.BANANA]: 'Drops behind you. The next kart that runs over it spins out.',
+  [ITEM.FAKE_ITEM]: 'Looks like a box but is a cloud: karts behind you think it is real.',
+  [ITEM.LIGHTNING]: 'Every racer ahead of you shrinks and slows down.',
+  [ITEM.STAR]: 'Speed, immunity to items, and you knock others just by touching them.',
+};
 export const ITEM_COUNT = {
   [ITEM.TRIPLE_MUSHROOM]: 3, [ITEM.TRIPLE_GREEN]: 3, [ITEM.TRIPLE_RED]: 3, [ITEM.TRIPLE_BANANA]: 3,
 };
@@ -109,9 +120,15 @@ export const AI = {
 
 // ---------------------------------------------------------------- camera / split screen
 export const CAM = {
-  back: 11.0, up: 5.4, lead: 7.0,           // chase rig
-  followRate: 6.5, fov: 62, fovBoost: 74, fovSpeed: 0.45,
+  // Chase rig. Tuned against tools/probe-camera.js, which measures how large the player's kart
+  // actually renders: it must stay a clear fraction of its half-pane at full speed, so these
+  // numbers are set by measurement, not taste. (An earlier version sat 11 m back and got further
+  // back with speed; with the follow lag that put the camera ~19 m away and the kart read at 2%.)
+  back: 9.2, up: 3.4, lead: 5.5,
+  followRate: 12.0,                        // higher = less lag; lag is what makes the kart shrink
+  fov: 64, fovBoost: 68, fovSpeed: 0.22,   // a big fov kick also shrinks the kart — kept small
   near: 0.5, far: 900,
+  speedPull: 0.6, upPull: 0.5, boostPull: 1.0,   // keep framing near-constant at any speed
   split: 'horizontal',                       // 2P: stacked halves (classic MK on TV)
   shakeDecay: 4.0,
 };
@@ -145,7 +162,7 @@ export const KEYMAP_LABEL = {
   wasd: { up: 'W', down: 'S', left: 'A', right: 'D', drift: 'LEFT SHIFT', use: 'SPACE' },
   arrows: { up: '↑', down: '↓', left: '←', right: '→', drift: '. (period)', use: '/ (slash)' },
 };
-export const GLOBAL_KEYS = { start: ['Enter'], restart: ['KeyR'], pause: ['KeyP'], split: ['KeyT'] };
+export const GLOBAL_KEYS = { start: ['Enter'], restart: ['KeyR'], pause: ['KeyP', 'Escape'], split: ['KeyT'] };
 
 // ---------------------------------------------------------------- tracks
 // Control points are authored HERE (the PM owns the layout). Everything derived —

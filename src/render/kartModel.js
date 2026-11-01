@@ -459,15 +459,32 @@ export function buildItemProps(THREE) {
   const matStarCenter = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.9 });
 
   return {
-    // Rotatable question-mark style box
+    // The item box on the road. It used to be a 0.15 m cube while the pickup radius is 1.9 m —
+    // you collected things you could barely see. Drawn to match what it actually collects:
+    // a ~1.5 m glowing crate with an edge outline and a bright core, so it reads from a distance.
     itemBox: (() => {
-      const geo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
-      const mat = new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.3, metalness: 0.8,
-        emissive: 0xffff00, emissiveIntensity: 0.2 });
-      const mesh = new THREE.Mesh(geo, mat);
+      const g = new THREE.Group();
+      const S = 1.5;
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x1b6f8c, roughness: 0.25, metalness: 0.35,
+        emissive: 0x2fb8e6, emissiveIntensity: 0.55, transparent: true, opacity: 0.9,
+      });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(S, S, S), mat);
       mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      return mesh;
+      g.add(mesh);
+      // hard edge outline: the thing that makes a translucent crate readable against a bright track
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(S, S, S)),
+        new THREE.LineBasicMaterial({ color: 0xd8f6ff })
+      );
+      g.add(edges);
+      // bright core, so it still reads when the crate edge-on
+      const core = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(S * 0.30, 1),
+        new THREE.MeshBasicMaterial({ color: 0xfff4b0 })
+      );
+      g.add(core);
+      return g;
     })(),
 
     // Fresh held item beside driver

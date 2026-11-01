@@ -29,6 +29,7 @@ const shotName = qs.get('shot') || null;
 const RENDER_SCALE = clamp(parseFloat(qs.get('scale') || '1') || 1, 0.3, 1);   // lower = faster on weak GPUs
 const NO_SHADOW = qs.get('noshadow') === '1';
 const LAPS_OVERRIDE = qs.get('laps') ? parseInt(qs.get('laps'), 10) : null;
+const DEBUG_HUD = qs.get('debug') === '1';   // raw phase/clock readout for the test harness only
 
 function boot() {
   const canvas = document.getElementById('game');
@@ -100,7 +101,7 @@ function boot() {
     race = createRace(track, karts);
     race.totalLaps = track.def.laps;
 
-    hud = createHUD(uiRoot, karts.map((k) => ({ id: k.id, name: k.name, spec: k.spec, human: k.human })), { players: humanCount });
+    hud = createHUD(uiRoot, karts.map((k) => ({ id: k.id, name: k.name, spec: k.spec, human: k.human })), { players: humanCount, debug: DEBUG_HUD });
     hud.setTrack(track.minimap);
 
     // one chase camera per human (in the all-AI smoke run, per kart)
@@ -121,6 +122,14 @@ function boot() {
       tracks: TRACKS.map((t, i) => ({ name: t.name, selected: i === trackIdx })),
       players: PLAYERS.slice(0, humanCount).map((p) => ({ name: p.name, keys: p.keys, color: p.color })),
     };
+  }
+  function toTitle() {
+    // the pause menu offers "Quit to Title"; it had no handler, so the option did nothing
+    started = false; paused = false;
+    hud.hideResults();
+    race.start();
+    buildWorld();
+    menu.showTitle(menuInfo());
   }
   function startRace() {
     started = true; paused = false;
@@ -298,6 +307,8 @@ function boot() {
 
   // ---------- input plumbing ----------
   window.addEventListener('keydown', (e) => {
+    // after the flag, Esc/Enter goes back to the title screen (it used to do nothing at all)
+    if (started && race.phase === 'finished' && (e.code === 'Escape' || e.code === 'Enter')) { toTitle(); return; }
     if (GLOBAL_KEYS.pause.includes(e.code)) { paused = !paused; if (paused) menu.showPause(); else menu.hidePause(); return; }
     if (GLOBAL_KEYS.restart.includes(e.code)) { if (started) { race.start(); hud.hideResults(); } return; }
     if (started && race.phase === 'finished' && e.code === 'Enter') { race.start(); hud.hideResults(); return; }
@@ -314,7 +325,8 @@ function boot() {
     else if (a === 'p1only') { humanCount = 1; buildWorld(); startRace(); }
     else if (a === 'restart') { race.start(); hud.hideResults(); }
     else if (a === 'resume') { paused = false; menu.hidePause(); }
-    else if (a === 'next') { trackIdx = (trackIdx + 1) % TRACKS.length; buildWorld(); menu.showTitle(menuInfo()); }
+    else if (a === 'quit') { toTitle(); }
+    else if (a === 'switch' || a === 'next') { trackIdx = (trackIdx + 1) % TRACKS.length; buildWorld(); menu.showTitle(menuInfo()); }
   });
   menu.showTitle(menuInfo());
   if (allAI) { startRace(); menu.hide(); }   // hands-off smoke run for the browser harness

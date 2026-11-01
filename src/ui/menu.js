@@ -16,45 +16,68 @@
 //   focus ring, player colours. No external fonts/images/frameworks.
 //
 // ----------------------------------------------------------------------
-import { KEYMAP_LABEL } from '../config.js';
+import { KEYMAP_LABEL, ITEM, ITEM_NAME, ITEM_DESC } from '../config.js';
 
 export function createMenu(root, opts) {
   // ---- injected single stylesheet ------------------------------------
   const style = document.createElement('style');
   style.textContent = `
-    /* --- root --------------------------------------------------- */
-    .kc-menu { position: relative; width: 100%; height: 100%; background: #111; color: #eee; }
+    /* --- root: centred card, scrollable if the window is short ---- */
+    .kc-menu {
+      position: relative; width: 100%; height: 100%; background: #111; color: #eee;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      overflow: auto; padding: 1rem 0; box-sizing: border-box;
+      pointer-events: auto;  /* #ui is pointer-events:none; without this no button is clickable */
+    }
 
     /* --- title / subtitle ---------------------------------------- */
     .kc-title {
       font-family: system-ui, -apple-system, sans-serif;
-      font-size: calc(var(--kc-scale) * 4rem);
+      font-size: max(28px, calc(var(--kc-scale) * 2.4rem));
       font-weight: 900;
       text-align: center;
-      margin: calc(var(--kc-scale) * 2rem) 0;
+      margin: 0.3rem 0;
       text-shadow: 0 0 8px var(--kc-glow-color, #fff);
     }
     .kc-subtitle {
       font-family: system-ui, -apple-system, sans-serif;
-      font-size: calc(var(--kc-scale) * 1.5rem);
+      font-size: max(12px, calc(var(--kc-scale) * 0.95rem));
       text-align: center;
-      margin-bottom: calc(var(--kc-scale) * 3rem);
+      margin-bottom: 0.6rem;
+      opacity: 0.85;
     }
 
     /* --- track name ---------------------------------------------- */
     .kc-track {
       font-family: system-ui, -apple-system, sans-serif;
-      font-size: calc(var(--kc-scale) * 1.2rem);
+      font-size: max(12px, calc(var(--kc-scale) * 0.9rem));
       text-align: center;
-      margin-bottom: calc(var(--kc-scale) * 2rem);
+      margin-bottom: 0.5rem;
+      color: #ffd76a;
     }
 
     /* --- control map display ------------------------------------ */
     .kc-control {
       font-family: system-ui, -apple-system, sans-serif;
-      font-size: calc(var(--kc-scale) * 0.9rem);
+      font-size: max(11px, calc(var(--kc-scale) * 0.8rem));
+      text-align: center;
+      margin-bottom: 0.5rem;
     }
-    .kc-control span { display: inline-block; margin-right: calc(var(--kc-scale) * 0.5rem); }
+    .kc-control span { display: inline-block; margin-right: 0.7rem; }
+
+    /* --- what each pickup does: a first-time player should not have to guess -- */
+    .kc-legend {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 2px 0.7rem;
+      max-width: min(94vw, 60rem);
+      margin: 0.3rem auto 0.7rem;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: max(11px, calc(var(--kc-scale) * 0.8rem));
+      line-height: 1.35;
+    }
+    .kc-legend b { font-weight: 700; color: #fff; white-space: nowrap; }
+    .kc-legend i { font-style: normal; color: #b9c2cc; }
 
     /* --- buttons ------------------------------------------------- */
     .kc-btn {
@@ -95,6 +118,15 @@ export function createMenu(root, opts) {
   menuRoot.className = 'kc-menu';
   root.appendChild(menuRoot);
 
+  // The stylesheet sizes everything from --kc-scale. It was never assigned, so every calc()
+  // fell back to the browser default and the title screen rendered unstyled.
+  const applyScale = () => {
+    const s = Math.min(1.35, Math.max(0.6, Math.min(window.innerWidth, window.innerHeight) / 900));
+    menuRoot.style.setProperty('--kc-scale', String(s.toFixed(3)));
+  };
+  applyScale();
+  window.addEventListener('resize', applyScale);
+
   // ---- shared vars ---------------------------------------------------
   let selectedIdx = 0;                // index among visible buttons
   let visibleMode = 'title';         // 'title'|'pause'|'controls'
@@ -133,6 +165,25 @@ export function createMenu(root, opts) {
       controlsDiv.appendChild(span);
     });
     menuRoot.appendChild(controlsDiv);
+
+    // what the pickups do — built from config so the legend can never drift from the real items
+    const legend = document.createElement('div');
+    legend.className = 'kc-legend';
+    for (const id of [ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL, ITEM.BANANA, ITEM.FAKE_ITEM, ITEM.LIGHTNING, ITEM.STAR]) {
+      const name = document.createElement('b');
+      name.textContent = ITEM_NAME[id];
+      const desc = document.createElement('i');
+      desc.textContent = ITEM_DESC[id] || '';
+      legend.appendChild(name);
+      legend.appendChild(desc);
+    }
+    const useHint = document.createElement('b');
+    useHint.textContent = 'USING AN ITEM';
+    const hintText = document.createElement('i');
+    hintText.textContent = 'Drive over a glowing box to take an item, then press your USE key to fire it. Press during the countdown to launch a mushroom early.';
+    legend.appendChild(useHint);
+    legend.appendChild(hintText);
+    menuRoot.appendChild(legend);
 
     // button container
     const btnGrp = document.createElement('div');

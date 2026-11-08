@@ -17,6 +17,10 @@ export function createStage(THREE, canvas, opts = {}) {
   renderer.setClearColor(RENDER.fogColor, 1);
 
   const scene = new THREE.Scene();
+  // browsers on macOS (Safari/Firefox) can discard a WebGL context at any time; without
+  // preventDefault the canvas stays black forever. preventDefault lets the browser restore it,
+  // and WebGLRenderer reinitialises on 'webglcontextrestored' on its own.
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); console.warn('WebGL context lost — the browser will try to restore it'); });
   scene.fog = new THREE.Fog(RENDER.fogColor, RENDER.fogNear, RENDER.fogFar);
 
   // ---------- sky dome: gradient + sun disc, no textures ----------

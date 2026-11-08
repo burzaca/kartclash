@@ -392,7 +392,8 @@ export function createHUD(root, racerSpecs, opts) {
       // the debug readout is a harness tool, not part of the game's UI
       el.status.style.display = (opts && opts.debug) ? 'block' : 'none';
 
-      el.banner.style.fontSize = px(L.u * 4.5);
+      el._bannerBig = px(L.u * 4.5); el._bannerSm = px(L.u * 1.35);
+        el.banner.style.fontSize = el._bannerBig;
 
       // the results card is centred — allowed, because it only appears after the flag
       const rw = Math.min(rect.w * 0.62, L.u * 26);
@@ -529,7 +530,7 @@ export function createHUD(root, racerSpecs, opts) {
 
     // banner(text, sub, dur, onlyPane) - big centre text (countdown, lap alerts).
     // onlyPane targets one player's half of the split screen; without it both panes show it.
-    banner(text, sub, dur, onlyPane) {
+    banner(text, sub, dur, onlyPane, small) {
       // This used to write into viewport 0's POSITION BADGE and then fade it out — which
       // destroyed the position display for player 1 after the countdown and showed nothing
       // useful in the second pane. It is now a real centred overlay in each pane.
@@ -544,6 +545,8 @@ export function createHUD(root, racerSpecs, opts) {
           el.banner.appendChild(s);
         }
         el.banner.classList.toggle('show', !!text);
+        el.banner.style.fontSize = small ? el._bannerSm : el._bannerBig;
+        el.banner.style.top = small ? '8%' : '22%';
         clearTimeout(el._bannerT);
         if (text) el._bannerT = setTimeout(() => el.banner.classList.remove('show'), dur || 900);
       }

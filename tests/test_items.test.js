@@ -481,3 +481,19 @@ test('regression 2026-11-08: a near-centered pass at 1.7 m must collect (was a s
   k.pos.x = b.x + 1.7; k.pos.z = b.z;           // visually inside a 1.5 m crate's neighborhood
   assert.notEqual(items.collect(k, ctx), 0, '1.7 m from an empty-handed kart must be inside the 1.9 m pickup radius');
 });
+
+test('regression 2026-11-08b: full stack of the same item must NOT consume the box (was: box vanished, player got nothing)', () => {
+  const track = makeLoopTrack();
+  const items = createItemSystem(track, mulberry32(3));
+  const k = place(track, makeTestKart(0), 30);
+  k.place = 1;
+  k.item = ITEM.MUSHROOM; k.count = 3;           // full mushroom stack
+  let reason = null;
+  const ctx = { karts: [k], rng: () => 0 };       // rng 0 => first weighted entry of the place-1 table (mushroom)
+  const b = items.boxes[2];
+  k.pos.x = b.x; k.pos.z = b.z;
+  const got = items.collect(k, { ...ctx, onBlocked: (_k, _b, why) => { reason = why; } });
+  assert.equal(got, 0, 'a full same-item stack must not draw from the box');
+  assert.equal(b.active, true, 'the box must stay for the next racer');
+  assert.equal(reason, 'full');
+});

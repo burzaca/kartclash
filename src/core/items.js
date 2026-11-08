@@ -304,11 +304,18 @@ const STACKABLE_BASES = new Set([ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL
         return 0;
       }
 
-      b.active = false;
-      b.respawnAt = clock + ITEMS.boxRespawn;
       const r = (ctx && ctx.rng) || rng;
       const id = rngWeighted(r, tableForPlace(k.place || 1, fieldSize(ctx)));
       const base = baseOf(id);
+      if (holding && base === heldBase && (k.count | 0) >= 3) {
+        // stack already full: rolling the same item would consume the box and give
+        // NOTHING ("I went perfectly through one and it disappeared" report). Leave the
+        // box for someone else and tell the player why.
+        if (typeof ctx?.onBlocked === 'function') ctx.onBlocked(k, b, 'full');
+        return 0;
+      }
+      b.active = false;
+      b.respawnAt = clock + ITEMS.boxRespawn;
       if (holding && base === heldBase && (k.count || 1) < 3) {
         k.count = Math.min(3, (k.count || 1) + 1);
       } else {

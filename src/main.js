@@ -195,7 +195,7 @@ function boot() {
   function ctxOf() {
     return {
       karts, track, items, fx, rng: sessionRng, time: race ? race.clock : 0,
-      onBlocked: (k) => {
+      onBlocked: (k, b, why) => {
         if (!k.human) return;
         const pane = k.viewport ? k.viewport.i : 0;
         hud.pulseItem(pane);
@@ -204,7 +204,8 @@ function boot() {
         const nowT = race ? race.clock : 0;
         if (!toldHolding.has(k.id) || nowT - (blockedAt.get(k.id) ?? -9) > 3.5) {
           toldHolding.add(k.id); blockedAt.set(k.id, nowT);
-          hud.banner('ITEM ALREADY IN HAND', `use it first: press ${useKeyLabel(k)}`, 2000, pane);
+          hud.banner(why === 'full' ? 'ITEM STACK FULL' : 'ITEM ALREADY IN HAND',
+            why === 'full' ? 'use some first' : `use it first: press ${useKeyLabel(k)}`, 1800, pane, true);
         }
       },
     };
@@ -233,7 +234,7 @@ function boot() {
         // the first item a human picks up teaches them what to do with it, in their own keys
         if (got && k.human && !taughtItemKey.has(k.id)) {
           taughtItemKey.add(k.id);
-          hud.banner(ITEM_NAME[got] || 'ITEM ACQUIRED', `press ${useKeyLabel(k)} to use it`, 2400, k.viewport ? k.viewport.i : 0);
+          hud.banner(ITEM_NAME[got] || 'ITEM ACQUIRED', `press ${useKeyLabel(k)} to use it`, 2400, k.viewport ? k.viewport.i : 0, true);
         }
       }
     }

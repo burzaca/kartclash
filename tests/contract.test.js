@@ -244,3 +244,14 @@ test('pause keys are guarded by started+phase in the key handler', () => {
   const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   assert.match(src, /if \(started && race\.phase !== 'finished' && GLOBAL_KEYS\.pause\.includes\(e\.code\)\)/);
 });
+
+// Layering guard: an emptied menu overlay must be display:none and both overlays must be
+// absolutely positioned — block-flow stacking made the black sheet land on the canvas on some
+// browsers (the 2026-11-08 "black screen" incident).
+test('menu/HUD overlays are absolute and the empty menu hides itself', () => {
+  const menu = readFileSync(new URL('../src/ui/menu.js', import.meta.url), 'utf8');
+  const hud = readFileSync(new URL('../src/ui/hud.js', import.meta.url), 'utf8');
+  assert.match(menu, /\.kc-menu:empty \{ display: none; \}/);
+  assert.match(menu, /\.kc-menu \{[\s\S]*?position: absolute; inset: 0;/);
+  assert.match(hud, /\.kc-hud \{ position: absolute; inset: 0;/);
+});

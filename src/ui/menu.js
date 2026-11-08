@@ -24,11 +24,14 @@ export function createMenu(root, opts) {
   style.textContent = `
     /* --- root: centred card, scrollable if the window is short ---- */
     .kc-menu {
-      position: relative; width: 100%; height: 100%; background: #111; color: #eee;
+      /* absolute + :empty hidden: an emptied menu (hide() clears contents) must never sit over
+         the canvas — depending on sibling order it used to land at y=0 and black out the game. */
+      position: absolute; inset: 0; background: #111; color: #eee;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       overflow: auto; padding: 1rem 0; box-sizing: border-box;
       pointer-events: auto;  /* #ui is pointer-events:none; without this no button is clickable */
     }
+    .kc-menu:empty { display: none; }
 
     /* --- title / subtitle ---------------------------------------- */
     .kc-title {

@@ -32,7 +32,7 @@ export function createHUD(root, racerSpecs, opts) {
   // that was never set, so the browser threw the sizes away and the chips piled up on each other.)
   const style = document.createElement('style');
   style.textContent = `
-    .kc-hud { position: relative; width: 100%; height: 100%; }
+    .kc-hud { position: absolute; inset: 0; }  /* overlay, not block-flow: order must not matter */
     .kc-viewport { position: absolute; pointer-events: none; }
 
     .kc-badge, .kc-lap, .kc-standings, .kc-status {

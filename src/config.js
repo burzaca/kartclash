@@ -137,8 +137,8 @@ export const CAM = {
     far: { back: 12.5, up: 4.6, lead: 7.5 },
   },
   presetOrder: ['close', 'normal', 'far'],
-  followRate: 12.0,                        // higher = less lag; lag is what makes the kart shrink
-  fov: 64, fovBoost: 68, fovSpeed: 0.22,   // a big fov kick also shrinks the kart — kept small
+  followRate: 17.0,                        // higher = less lag; lag is what makes the kart feel dragged behind
+  fov: 64, fovBoost: 68, fovSpeed: 0.08,   // player asked: never fall far at speed; only a mild fov kick
   near: 0.5, far: 900,
   speedPull: 0.6, upPull: 0.5, boostPull: 1.0,   // keep framing near-constant at any speed
   split: 'horizontal',                       // 2P: stacked halves (classic MK on TV)

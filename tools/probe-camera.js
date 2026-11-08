@@ -88,7 +88,6 @@ function runTrack(def) {
   });
 
   let frames = 0, worstSize = Infinity, bestSize = 0, offScreen = 0, buried = 0, roadMiss = 0;
-  const heights = [];
   // How far down the track stays in view — the measurable version of "see further ahead".
   const AHEAD_LADDER = [10, 25, 40, 60, 90, 140, 200, 280];
   const visibleAhead = {};
@@ -136,7 +135,15 @@ function runTrack(def) {
 
       // the player's kart must be on screen and at a readable size
       mdl.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(mdl);
+      // silhouette only: turbo-flame FX are additive meshes parented to the kart (and Box3 keeps
+      // invisible children) — they must not count as kart size.
+      const box = new THREE.Box3();
+      mdl.traverse((o) => {
+        if (!o.isMesh) return;
+        const m = Array.isArray(o.material) ? o.material[0] : o.material;
+        if (m && m.blending === THREE.AdditiveBlending) return;
+        box.expandByObject(o);
+      });
       const corners = [];
       for (const cx of [box.min.x, box.max.x]) for (const cy of [box.min.y, box.max.y]) for (const cz of [box.min.z, box.max.z]) {
         const p = ndc(cam, cx, cy, cz);
@@ -155,7 +162,6 @@ function runTrack(def) {
       const dist = cam.position.distanceTo(mdl.position);
       if (h < 0.14) samples.push({ t: +race.clock.toFixed(1), why: `kart only ${(h * 100).toFixed(1)}% of frame height (cam ${dist.toFixed(1)} m away, kart ${k.speed.toFixed(1)} m/s)` });
       if (h > 0.34) samples.push({ t: +race.clock.toFixed(1), why: `kart fills ${(h * 100).toFixed(1)}% of the frame — camera too close` });
-      heights.push(h);
       worstSize = Math.min(worstSize, h); bestSize = Math.max(bestSize, h);
 
       // the road ahead must be in frame — a chase cam that only shows sky is useless.
@@ -196,17 +202,8 @@ function runTrack(def) {
   if (buried > 0) fail(`${buried} frames with the camera under the track surface`);
   else ok('camera stays above the surface');
   if (worstSize * 100 < 14) fail(`player kart drops to ${(worstSize * 100).toFixed(1)}% of the viewport height — camera too far back at speed`);
-  else {
-  // the 34% ceiling applies to SUSTAINED framing (95th pct): single transient frames where a kart
-  // faces the camera mid-drift scale up, and V8 transcendental ULPs shift which frames those land
-  // on across Node builds — a worst-frame gate was flaky (30% local vs 38% CI, same commit).
-  // A real framing bug (stuck camera, zoom collapse) persists for many frames and trips p95 or the hard cap.
-  const hSorted = heights.slice().sort((a, b) => a - b);
-  const p95 = hSorted[Math.floor(hSorted.length * 0.95)] || 0;
-  if (p95 * 100 > 33) fail(`player kart sustains ${(p95 * 100).toFixed(1)}% of the viewport (p95) — camera too close`);
-  else if (bestSize * 100 > 45) fail(`player kart spikes to ${(bestSize * 100).toFixed(1)}% of the viewport — camera fault`);
-  else ok(`kart reads ${(worstSize * 100).toFixed(0)}-${(p95 * 100).toFixed(0)}% (p95) of its viewport, spike max ${(bestSize * 100).toFixed(0)}%`);
-  }
+  else if (bestSize * 100 > 34) fail(`player kart reaches ${(bestSize * 100).toFixed(1)}% of the viewport — camera too close`);
+  else ok(`kart reads ${(worstSize * 100).toFixed(0)}-${(bestSize * 100).toFixed(0)}% of its viewport`);
 }
 
 const defs = trackId ? TRACKS.filter((t) => t.id === trackId) : TRACKS;

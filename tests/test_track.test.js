@@ -30,7 +30,7 @@ for (const { def, tr } of built) {
     }
     const s = tr.sample(pl.pts[5].x, pl.pts[5].z, 5);
     assert.deepEqual(Object.keys(s).sort(),
-      ['dist', 'half', 'idx', 'nx', 'nz', 'onRoad', 'pad', 'side', 'slopeX', 'slopeZ', 'tx', 'tz', 'y'].sort());
+      ['ag', 'dist', 'half', 'idx', 'nx', 'nz', 'onRoad', 'pad', 'side', 'slopeX', 'slopeZ', 'tx', 'tz', 'y'].sort());
     assert.equal(tr.checkpoints.length, 8);
     assert.equal(tr.itemNodes.length, def.itemNodes.length);
     assert.equal(tr.pads.length, def.boostPads.length);
@@ -102,11 +102,12 @@ for (const { def, tr } of built) {
       for (let x = b.minX; x <= b.maxX; x += 1) {
         const y = tr.surfaceY(x, z);
         maxAbs = Math.max(maxAbs, Math.abs(y));
-        if (prev !== null) maxStep = Math.max(maxStep, Math.abs(y - prev));
+        // AG half-pipes are steep by design (bank + its embankment); their continuity has its own test
+        if (prev !== null && !tr.sample(x, z, -1).ag) maxStep = Math.max(maxStep, Math.abs(y - prev));
         prev = y;
       }
     }
-    assert.ok(maxAbs <= def.elev.amp * 1.01, `elevation ${maxAbs}`);
+    assert.ok(maxAbs <= def.elev.amp * 1.01 + Math.max(0, ...(def.ag || []).map((a) => a.amp)), `elevation ${maxAbs}`);   // + AG bank
     assert.ok(maxStep < 0.25, `terrain step ${maxStep}`);
     const s = tr.sample(pl.pts[10].x, pl.pts[10].z, 10);
     assert.ok(Number.isFinite(s.slopeX) && Number.isFinite(s.slopeZ) && Math.hypot(s.slopeX, s.slopeZ) < 0.2);
@@ -186,5 +187,60 @@ for (const { def, tr } of built) {
     for (const p of pl.pts) assert.ok(p.x > b.minX && p.x < b.maxX && p.z > b.minZ && p.z < b.maxZ);
     const m = tr.minimap;
     for (let k = 0; k < m.xs.length; k++) assert.ok(m.xs[k] >= m.minX && m.xs[k] <= m.maxX && m.zs[k] >= m.minZ && m.zs[k] <= m.maxZ);
+  });
+
+  // ---------------------------------------------------------------- anti-gravity (§7)
+  test(`${def.id}: agRanges + bankOffset (0 outside, 0 at side 0, ≈amp at |side|=half mid-range)`, () => {
+    assert.equal(tr.agRanges.length, def.ag.length);
+    const inRange = (i, r) => (r.i0 <= r.i1 ? i >= r.i0 && i <= r.i1 : i >= r.i0 || i <= r.i1);
+    for (const r of tr.agRanges) {
+      assert.ok(r.i0 >= 0 && r.i1 >= 0 && r.amp === def.ag[tr.agRanges.indexOf(r)].amp);
+      const len = ((r.i1 - r.i0 + n) % n);
+      const mid = (r.i0 + Math.floor(len / 2)) % n, h = tr.halfWidth(mid);
+      assert.ok(Math.abs(tr.bankOffset(mid, h) - r.amp) < 1e-9, `mid bank ${tr.bankOffset(mid, h)}`);
+      assert.ok(Math.abs(tr.bankOffset(mid, -h) - r.amp) < 1e-9);
+      assert.equal(tr.bankOffset(mid, 0), 0);
+      assert.ok(Math.abs(tr.bankOffset(mid, h * 3) - r.amp) < 1e-9, 'clamped beyond the edge');
+      const p = pl.pts[mid];
+      assert.equal(tr.sample(p.x, p.z, mid).ag, true);
+      // surfaceY carries the bank: edge sits ~amp above the centre (elevation is level across)
+      const q = tr.pointAt(tr.cum[mid], h * 0.999);
+      assert.ok(Math.abs(tr.surfaceY(q.x, q.z) - tr.surfaceY(p.x, p.z) - r.amp) < 0.05);
+    }
+    for (let i = 0; i < n; i++) {
+      if (tr.agRanges.some((r) => inRange(i, r))) continue;
+      assert.equal(tr.bankOffset(i, tr.halfWidth(i)), 0, `bank outside at ${i}`);
+      assert.equal(tr.sample(pl.pts[i].x, pl.pts[i].z, i).ag, false, `ag flag outside at ${i}`);
+    }
+  });
+
+  test(`${def.id}: banked surface is continuous across range edges (no step > 0.2 m)`, () => {
+    for (const r of tr.agRanges) {
+      for (const i of [r.i0, r.i1]) {
+        const s0 = tr.cum[i];
+        for (const f of [0, 0.5, -0.5, 0.95, -0.95, 1.05]) {
+          let prev = null;
+          for (let ds = -40; ds <= 40; ds += 0.5) {
+            const p = tr.pointAt(s0 + ds, 0), q = tr.pointAt(s0 + ds, f * p.half);
+            const y = tr.surfaceY(q.x, q.z);
+            if (prev !== null) assert.ok(Math.abs(y - prev) <= 0.2, `step ${(y - prev).toFixed(3)} at ds ${ds} f ${f}`);
+            prev = y;
+          }
+        }
+      }
+    }
+  });
+
+  test(`${def.id}: outside AG ranges the surface is exactly the no-AG surface`, () => {
+    const flat = buildTrack({ ...def, ag: [] });
+    assert.equal(flat.agRanges.length, 0);
+    const inAny = (i) => tr.agRanges.some((r) => (r.i0 <= r.i1 ? i >= r.i0 - 1 && i <= r.i1 + 1 : i >= r.i0 - 1 || i <= r.i1 + 1));
+    for (let i = 0; i < n; i += 3) {
+      if (inAny(i)) continue;
+      for (const f of [0, 0.7, -1]) {
+        const q = tr.pointAt(tr.cum[i], f * tr.halfWidth(i));
+        assert.equal(tr.surfaceY(q.x, q.z), flat.surfaceY(q.x, q.z), `idx ${i}`);
+      }
+    }
   });
 }

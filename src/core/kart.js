@@ -17,7 +17,7 @@
 //   into speed — that is "speed derived from vel projected on forward".
 
 import { KART, ITEMS, CAM, RACE, PLAYERS } from '../config.js';
-import { clamp, damp, approach, sign, forward2 } from '../foundation.js';
+import { clamp, damp, approach, sign, forward2, wrapPi } from '../foundation.js';
 
 // ---- local constants (cosmetic or structural; nothing here duplicates a config knob) ----
 const SHRUNK_MUL = 0.85;          // contract §2: shrunk -> 0.85 speed cap
@@ -37,6 +37,11 @@ const LEAN_RATE = 8;
 const DUST_INTERVAL = 0.06;       // s between off-road dust puffs
 const SPARK_INTERVAL = 0.05;      // s between drift spark trails
 const SPARK_COLORS = [0x5ab4ff, 0xff9a2a, 0xd36bff];   // mini / super / ultra
+const AG_EXTRA = 1.0;             // m past the road edge a kart may climb inside an anti-gravity range
+const AG_ASSIST_FROM = 0.6;       // |side|/half where the inward bank assist starts
+const AG_ASSIST = 0.006;          // inward accel per (m/s)², ≈5.4 m/s² at top speed high on the bank
+const AG_ALIGN = 6;               // 1/s rate the nose turns along the bank lip
+const AG_FX_DECAY = 0.5;          // s for fx.ag to fade after leaving a range
 const DEFAULT_FIELD = RACE.aiField + PLAYERS.length;
 
 // Private per-kart scratch that is NOT part of the shared §0 shape.
@@ -66,7 +71,7 @@ export function createKart(id, spec, human) {
     offRoad: false, onPad: false, wallHit: 0, hitFlash: 0,
     plIdx: 0,
     lap: 0, progress: 0, place: 1, finished: false, finishTime: 0, raceTime: 0, lapStart: 0, lapTimes: [],
-    fx: { shake: 0, boost: 0, spark: -1 },
+    fx: { shake: 0, boost: 0, spark: -1, ag: 0 },
     lean: 0, wheelSpin: 0, steerVis: 0,
   };
 }
@@ -214,9 +219,30 @@ export function stepKart(kart, track, dt, ctx = {}) {
   kart.pos.x += kart.vel.x * dt;
   kart.pos.z += kart.vel.z * dt;
   const s = track.sample(kart.pos.x, kart.pos.z, kart.plIdx);
-  const limit = s.half - KART.radius;
+  const ag = !!s.ag;
+  const limit = ag ? s.half + AG_EXTRA : s.half - KART.radius;
   let surfS = s;
-  if (Math.abs(s.side) > limit) {
+  if (ag) {
+    // anti-gravity wall-ride: the bank (track.surfaceY) lifts the kart; no wall hit, no speed loss
+    const n = leftNormal(s), sg = sign(s.side), ox = n.x * sg, oz = n.z * sg;
+    const u = Math.abs(s.side) / s.half;
+    if (u > AG_ASSIST_FROM && kart.speed > 0) {             // gentle inward pull a ∝ speed²: yaw at a/v
+      const a = AG_ASSIST * kart.speed * kart.speed * Math.min(1, (u - AG_ASSIST_FROM) / (1 - AG_ASSIST_FROM));
+      kart.heading += sign(f.z * ox - f.x * oz) * (a / kart.speed) * dt;
+    }
+    if (Math.abs(s.side) > limit) {                         // top of the bank: slide along it
+      const pen = Math.abs(s.side) - limit;
+      kart.pos.x -= ox * pen; kart.pos.z -= oz * pen;
+      const vOut = kart.vel.x * ox + kart.vel.z * oz;
+      if (vOut > 0) { kart.vel.x -= ox * vOut; kart.vel.z -= oz * vOut; }
+      const fo = f.x * ox + f.z * oz;
+      if (fo > 0) {                                         // nose into the lip: turn it along the bank
+        const along = Math.atan2(f.z - oz * fo, f.x - ox * fo);
+        kart.heading += wrapPi(along - kart.heading) * Math.min(1, AG_ALIGN * dt);
+      }
+      surfS = null;
+    }
+  } else if (Math.abs(s.side) > limit) {
     const n = leftNormal(s);
     const sg = sign(s.side);
     const ox = n.x * sg, oz = n.z * sg;                    // outward unit vector
@@ -251,7 +277,7 @@ export function stepKart(kart, track, dt, ctx = {}) {
     surfS = null;
   }
 
-  kart.offRoad = !s.onRoad;
+  kart.offRoad = !ag && !s.onRoad;
   const wasOnPad = kart.onPad;
   kart.onPad = !!s.pad;
   if (kart.onPad) {
@@ -266,6 +292,7 @@ export function stepKart(kart, track, dt, ctx = {}) {
 
   // ---- effects for the renderer
   kart.fx.boost = kart.boost.time > 0 ? Math.min(1, kart.boost.time / 0.4) : 0;
+  kart.fx.ag = ag ? 1 : Math.max(0, (kart.fx.ag || 0) - dt / AG_FX_DECAY);
   kart.steerVis = damp(kart.steerVis, steer * MAX_WHEEL_ANGLE, STEER_VIS_RATE, dt);
   kart.wheelSpin += (kart.speed / WHEEL_RADIUS) * dt;
   if (kart.wheelSpin > 1e6 || kart.wheelSpin < -1e6) kart.wheelSpin %= Math.PI * 2;
@@ -389,7 +416,7 @@ export function resetKart(kart, slot, track, count = DEFAULT_FIELD) {
   kart.item = 0; kart.count = 0;
   kart.star = 0; kart.invisible = 0; kart.shrunk = 0; kart.spin = 0;
   kart.offRoad = false; kart.onPad = false; kart.wallHit = 0; kart.hitFlash = 0;
-  kart.fx.shake = 0; kart.fx.boost = 0;
+  kart.fx.shake = 0; kart.fx.boost = 0; kart.fx.ag = 0;
   kart.wheelSpin = 0;
   kart.pos.y = surfaceAt(track, g.x, g.z, null);
   priv.delete(kart);

@@ -36,6 +36,7 @@ const BOUNDS_MARGIN = 30;
 const START_CLEAR = 60;           // no scenery (except stands) within this radius of the start line
 const SHOULDER = 4;               // decor must sit beyond half + SHOULDER
 const SLOPE_H = 0.5;              // finite-difference step for slopes
+const AG_RAMP = 30;               // m over which an anti-gravity bank fades in/out at each range end
 
 function smoothCyclic(src, r) {
   const n = src.length, out = new Float64Array(n);
@@ -249,8 +250,12 @@ export function buildTrack(def) {
 
   // height for an already-located point (L must be fresh)
   function heightFromL(x, z) {
-    const e = (L.side < 0 ? -L.side : L.side) - L.half;
-    const base = L.valid ? elevAt(L.j, L.t) : EV[L.i];
+    const as = L.side < 0 ? -L.side : L.side, e = as - L.half;
+    let base = L.valid ? elevAt(L.j, L.t) : EV[L.i];
+    if (L.valid) {   // anti-gravity half-pipe: amp * clamp(|side|/half)^2, amp ramped along the range
+      const j1 = L.j + 1 === n ? 0 : L.j + 1, a = AGA[L.j] + L.t * (AGA[j1] - AGA[L.j]);
+      if (a > 0) { const u = as < L.half ? as / L.half : 1; base += a * u * u; }
+    }
     if (e <= SHOULDER_IN && L.valid) return base;
     const k = L.valid ? smoothstep((e - SHOULDER_IN) / (SHOULDER_OUT - SHOULDER_IN)) : 1;
     if (k >= 1) return terrainBlend(x, z);
@@ -297,6 +302,30 @@ export function buildTrack(def) {
 
   // ---------------------------------------------------------------- features from lap fractions
   const sOfFrac = (f) => wrapS(startS + f * loop);
+
+  // ---------------------------------------------------------------- anti-gravity ranges (§7)
+  // AGA[i] = bank amp at vertex i, cosine-ramped over AG_RAMP m at both range ends (0 outside);
+  // AGIN[i] = 1 when vertex i lies inside a range. heightFromL reads AGA, so surfaceY carries the bank.
+  const AGA = new Float64Array(n), AGIN = new Uint8Array(n);
+  const agRanges = (def.ag || []).map(({ t, t2, amp }) => {
+    const s0 = sOfFrac(t), len = wrapS(sOfFrac(t2) - s0);
+    let i0 = -1, i1 = -1;
+    for (let k = 0; k < n; k++) {
+      const i = (segOfS(s0) + k) % n, d = wrapS(cum[i] - s0);
+      if (d > len) continue;
+      const r = 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.min(d, len - d) / AG_RAMP));
+      AGA[i] = Math.max(AGA[i], amp * r); AGIN[i] = 1;
+      if (i0 < 0) i0 = i;
+      i1 = i;
+    }
+    return { i0, i1, amp };
+  });
+  const wrapI = (idx) => ((Math.round(idx) % n) + n) % n;
+  function bankOffset(idx, side) {
+    const i = wrapI(idx), u = Math.min(1, Math.abs(side) / HALF[i]);
+    return AGA[i] * u * u;
+  }
+
   const checkpoints = [];
   for (let k = 0; k < 8; k++) {
     const idx = advanceIdx(pl, startIdx, Math.round(k * n / 8));
@@ -336,7 +365,7 @@ export function buildTrack(def) {
       onRoad: (side < 0 ? -side : side) <= half - KART.radius,
       tx: TX[j], tz: TZ[j], nx, nz, y,
       slopeX: (yx1 - yx0) / (2 * SLOPE_H), slopeZ: (yz1 - yz0) / (2 * SLOPE_H),
-      pad,
+      pad, ag: AGIN[idx] === 1,
     };
   }
   function surfaceYHint(x, z, hint) { locate(x, z, hint); return heightFromL(x, z); }
@@ -378,7 +407,7 @@ export function buildTrack(def) {
   const track = {
     def, name: def.name, id: def.id,
     pl, total, startIdx, checkpoints, itemNodes, pads,
-    halfWidth, surfaceY, sample, progressOf, gridSlot,
+    halfWidth, surfaceY, sample, progressOf, gridSlot, agRanges, bankOffset,
     bounds, minimap: mm,
     decor: [],
     // extras (read-only, used by the renderer and handy for AI/tools)

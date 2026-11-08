@@ -73,7 +73,7 @@ test('createKart matches the §0 shape field for field', () => {
   assert.deepEqual(k.drift, { on: false, dir: 0, time: 0, tier: -1 });
   assert.deepEqual(k.air, { y: 0, vy: 0, onGround: true });
   assert.deepEqual(k.boost, { time: 0, mul: 1 });
-  assert.deepEqual(k.fx, { shake: 0, boost: 0, spark: -1 });
+  assert.deepEqual(k.fx, { shake: 0, boost: 0, spark: -1, ag: 0 });
   assert.deepEqual(k.lapTimes, []);
   assert.equal(k.name, 'P1'); assert.equal(k.ai, null); assert.equal(k.spec, PLAYERS[0]);
   const cpu = createKart(3, { name: 'ZIP' }, false);
@@ -555,4 +555,79 @@ test('attach/detach wire keyboard events per keymap without touching the other p
   assert.equal(fire('keydown', 'KeyQ'), 0, 'unmapped keys are not swallowed');
   // attach() without a window in node is a harmless no-op
   createControllers(1, [{ human: true, keys: 'wasd' }])[0].attach();
+});
+
+// ------------------------------------------------------------------ anti-gravity banks (§7)
+// Straight road along +x (side = -z) whose whole length is an AG range with a real half-pipe height.
+function agTrack(half = 10, amp = 2.6, ag = true) {
+  const t = straightTrack(half);
+  const bank = (z) => (ag ? amp * Math.min(1, Math.abs(z) / half) ** 2 : 0);
+  return { ...t, sample: (x, z) => ({ ...t.sample(x, z), ag, y: bank(z) }), surfaceY: (x, z) => bank(z) };
+}
+
+test('AG: steering hard into the bank climbs it, keeps speed (no wall hit), then returns inward', () => {
+  const half = 10, amp = 2.6, tr = agTrack(half, amp);
+  const k = newKart();
+  drive(k, tr, 3, { throttle: 1 });
+  const v0 = k.speed;
+  let yMax = 0, sideMax = 0;
+  for (let i = 0; i < 1.5 / DT; i++) {
+    k.input.throttle = 1; k.input.steer = -1; stepKart(k, tr, DT, {});
+    const s = tr.sample(k.pos.x, k.pos.z);
+    yMax = Math.max(yMax, k.pos.y); sideMax = Math.max(sideMax, Math.abs(s.side));
+    assert.equal(k.wallHit, 0, 'no wall hit inside AG');
+    assert.equal(k.offRoad, false, 'no off-road penalty inside AG');
+    assert.ok(Math.abs(s.side) <= half + 1.0 + 1e-9, `side ${s.side}`);
+  }
+  assert.ok(sideMax > half, `rode past the road edge (${sideMax})`);
+  assert.ok(yMax > amp * 0.9, `climbed the bank (y ${yMax})`);
+  assert.ok(k.speed >= v0 * 0.9, `kept speed ${k.speed} vs ${v0}`);
+  assert.equal(k.fx.ag, 1);
+  let sideMin = Infinity;
+  for (let i = 0; i < 3 / DT; i++) {
+    k.input.throttle = 1; k.input.steer = 0; stepKart(k, tr, DT, {});
+    sideMin = Math.min(sideMin, Math.abs(tr.sample(k.pos.x, k.pos.z).side));
+  }
+  assert.ok(sideMin < half * 0.6, `returned inward without steering (min |side| ${sideMin})`);
+  assert.ok(finite(k));
+});
+
+test('AG off: the same hard steer still hits the wall and cuts speed (old behaviour intact)', () => {
+  const half = 10, tr = agTrack(half, 2.6, false);
+  const k = newKart();
+  drive(k, tr, 3, { throttle: 1 });
+  const v0 = k.speed;
+  let hit = false, vMin = Infinity;
+  for (let i = 0; i < 1.5 / DT; i++) {
+    k.input.throttle = 1; k.input.steer = -1; stepKart(k, tr, DT, {});
+    if (k.wallHit > 0) hit = true;
+    vMin = Math.min(vMin, k.speed);
+    assert.ok(Math.abs(tr.sample(k.pos.x, k.pos.z).side) <= half - KART.radius + 1e-9);
+  }
+  assert.ok(hit, 'wall hit');
+  assert.ok(vMin < v0 * KART.wallSpeedLoss + 0.5, `speed cut ${vMin} vs ${v0}`);
+  assert.equal(k.fx.ag, 0);
+});
+
+test('AG: inward assist grows with speed², fx.ag decays to 0 over 0.5 s after leaving', () => {
+  const half = 10, tr = agTrack(half);
+  const pull = (v, z = -half * 0.95) => {
+    const k = newKart();
+    k.pos.z = z; k.speed = v; k.vel.x = v;                       // on the left bank, heading along
+    stepKart(k, tr, DT, {});
+    return k.heading * k.speed / DT;                             // lateral accel = yaw rate * v, + = toward centre
+  };
+  const p10 = pull(10), p20 = pull(20);
+  assert.ok(p10 > 0 && p20 > 0, `inward ${p10} ${p20}`);
+  assert.ok(Math.abs(p20 / p10 - 4) < 0.6, `∝ speed² (ratio ${p20 / p10})`);
+  assert.equal(pull(10, -half * 0.3), 0, 'no assist low on the bank');
+  const k = newKart();
+  k.pos.z = -half * 0.3; k.speed = 10; k.vel.x = 10;
+  stepKart(k, tr, DT, {});
+  assert.equal(k.fx.ag, 1);
+  const flat = agTrack(half, 2.6, false);
+  drive(k, flat, 0.25, { throttle: 1 });
+  assert.ok(k.fx.ag > 0.4 && k.fx.ag < 0.6, `half-decayed ${k.fx.ag}`);
+  drive(k, flat, 0.3, { throttle: 1 });
+  assert.equal(k.fx.ag, 0);
 });

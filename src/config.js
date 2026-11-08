@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-08.9',
+  build: '2026-11-08.10',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,
@@ -66,6 +66,9 @@ export function tableForPlace(place, fieldSize) {
 export const ITEMS = {
   boxRespawn: 3.0,           // s until a taken item box returns
   boxRadius: 1.9,            // pickup radius
+  pickGap: 0.8,              // s before the SAME kart may take another box (a 3-box cluster
+                             // spaced ~11 m was being machine-gunned: 3 draws in half a second,
+                             // each silently replacing the last — "the 2 adjacent ones disappeared")
   boxCount: 5,               // boxes across the road at each node
   itemGap: 0.55,             // s cooldown between uses
   shell: { speed: 42, life: 7.0, radius: 1.1, bounce: 0.9, wallBounceLife: 1.5 },

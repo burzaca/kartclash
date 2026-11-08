@@ -31,7 +31,7 @@ export function createItemSystem(track, rng) {
 
   function kartState(k) {
     let st = perKart.get(k.id);
-    if (!st) { st = { lastUse: -Infinity, cloudT: 0, starT: 0, cloudFx: null, starFx: null }; perKart.set(k.id, st); }
+    if (!st) { st = { lastUse: -Infinity, lastPick: -Infinity, cloudT: 0, starT: 0, cloudFx: null, starFx: null }; perKart.set(k.id, st); }
     return st;
   }
 
@@ -286,6 +286,9 @@ const STACKABLE_BASES = new Set([ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL
 
   function collect(k, ctx) {
     if (!k || k.finished) return 0;
+    // one pickup per pickGap per kart: passing a dense cluster must not silently consume
+    // every box in it while replacing the draw you just made (player report, 2026-11-08)
+    if (clock - kartState(k).lastPick < ITEMS.pickGap) return 0;
     for (const b of boxes) {
       if (!b.active) continue;
       // dist2 is SQUARED distance; boxRadius is linear. Comparing them directly capped the
@@ -316,6 +319,7 @@ const STACKABLE_BASES = new Set([ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL
       }
       b.active = false;
       b.respawnAt = clock + ITEMS.boxRespawn;
+      kartState(k).lastPick = clock;
       if (holding && base === heldBase && (k.count || 1) < 3) {
         k.count = Math.min(3, (k.count || 1) + 1);
       } else {
@@ -380,5 +384,5 @@ const STACKABLE_BASES = new Set([ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL
 
   buildBoxes();
 
-  return { boxes, effects, reset, update, collect, use, applyHits };
+  return { boxes, effects, reset, update, collect, use, applyHits, clock: () => clock };
 }

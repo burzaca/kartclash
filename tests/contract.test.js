@@ -160,12 +160,14 @@ test('§3 item system contract: boxes, weighted table by place, effects, hits', 
   const ctx = { karts: [k], track, items, fx: null, rng, time: 0 };
   const seenFirst = new Set(), seenLast = new Set();
   for (let round = 0; round < 400; round++) {
+    items.update(ITEMS.pickGap + 0.01, ctx);
     k.place = 1;
     k.pos.x = track.itemNodes[0].x; k.pos.z = track.itemNodes[0].z;
     for (const b of items.boxes) { b.active = true; }
     const got = items.collect(k, ctx);
     if (got) seenFirst.add(got);
     k.item = 0; k.count = 0;
+    items.update(ITEMS.pickGap + 0.01, ctx);   // real play never draws two boxes in one instant
     k.place = 6;
     for (const b of items.boxes) b.active = true;
     const got2 = items.collect(k, ctx);

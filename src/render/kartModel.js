@@ -5,7 +5,152 @@
 // No flatShading anywhere; high segment counts; all parts cast/receive shadow.
 // kart within ~2.2 m radius, ~1.6 m tall.
 
-export function buildKartModel(THREE, spec) {
+// ===================================================================== real car bodies (v2 §8)
+// CC0 Quaternius cars, vendored. Stable racer index -> file map.
+export const CAR_FILES = ['car', 'sportscar', 'taxi', 'policecar', 'carunqqkultru', 'sportscaroyqkvx9xnh'];
+const CAR_W = 1.8, CAR_L = 3.6;   // ~1.8 m wide unless that makes it longer than 3.6 m (smoke-render's chase-cam silhouette cap)
+let carCache = null, carLoading = null;
+
+// Which MTL materials are the paint: drop the shared trim names, keep the most saturated
+// survivors (white police/sports cars have only one survivor). Value = brightness relative to
+// the brightest paint, so a DarkOrange panel stays a darker shade of the player colour.
+const NOT_PAINT = /^(black|grey|gray|windows)$|lights$/i;
+export function pickBodyMaterials(kd) {
+  const sat = ([r, g, b]) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; return mx === mn ? 0 : (mx - mn) / (1 - Math.abs(2 * l - 1)); };
+  const cand = Object.keys(kd).filter((n) => !NOT_PAINT.test(n));
+  if (!cand.length) return {};
+  const top = Math.max(...cand.map((n) => sat(kd[n])));
+  const body = cand.filter((n) => sat(kd[n]) >= top - 0.05);
+  const vmax = Math.max(...body.map((n) => Math.max(...kd[n])));
+  return Object.fromEntries(body.map((n) => [n, Math.max(...kd[n]) / vmax]));
+}
+
+// Turbo flame look: drift tier colours, length 0.4 + tier*0.5 m, full length while boosting.
+export const FLAME_COLORS = [0x35a7ff, 0xff9a1f, 0xff3bd4];
+export function flameLook(kart, boostTier = 1) {
+  const t = kart.drift.on && kart.drift.tier >= 0 ? Math.min(2, kart.drift.tier) : -1;
+  if (kart.boost.time > 0) return { on: true, len: 1.4, tier: t >= 0 ? t : boostTier };
+  if (t >= 0) return { on: true, len: 0.4 + t * 0.5, tier: t };
+  return { on: false, len: 0, tier: -1 };
+}
+
+// Orient (front wheels -> +Z, snapped to 90°), centre, seat lowest point on y=0, scale to footprint.
+function fitCar(THREE, obj) {
+  const c = (o) => new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+  let front = null, back = null;
+  obj.updateMatrixWorld(true);
+  for (const m of obj.children) { if (/FrontLeft/i.test(m.name)) front = c(m); else if (/BackWheels/i.test(m.name)) back = c(m); }
+  const a = front && back ? Math.atan2(front.x - back.x, front.z - back.z) : 0;   // no wheel names: assume +Z
+  obj.rotation.y = -Math.round(a / (Math.PI / 2)) * (Math.PI / 2);
+  const outer = new THREE.Group();
+  outer.add(obj);
+  outer.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(outer), size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
+  obj.position.set(-mid.x, -box.min.y, -mid.z);
+  outer.scale.setScalar(Math.min(CAR_W / size.x, CAR_L / size.z));
+  return outer;
+}
+
+// Fetch + parse the 6 cars once (browser: same-origin vendored files). main.js awaits this before
+// building karts; buildKartModel falls back to the lathe kart while it is unresolved or failed.
+export function loadKartModels(THREE, fetchImpl = globalThis.fetch) {
+  if (carCache) return Promise.resolve(carCache);
+  if (carLoading) return carLoading;
+  carLoading = (async () => {
+    const [{ OBJLoader }, { MTLLoader }] = await Promise.all([
+      import('../../vendor/addons/OBJLoader.js'), import('../../vendor/addons/MTLLoader.js')]);
+    const text = async (f) => {
+      const r = await fetchImpl(new URL(`../../vendor/assets/cars/${f}`, import.meta.url).href);
+      if (!r.ok) throw new Error(`car asset ${f}: HTTP ${r.status}`);
+      return r.text();
+    };
+    const out = [];
+    for (const f of CAR_FILES) {
+      const [mtl, obj] = await Promise.all([text(f + '.mtl'), text(f + '.obj')]);
+      const kd = {};
+      for (const [name, m] of Object.entries(new MTLLoader().parse(mtl, '').materialsInfo)) if (m.kd) kd[name] = m.kd;
+      out.push({ file: f, kd, paint: pickBodyMaterials(kd), object: fitCar(THREE, new OBJLoader().parse(obj)) });
+    }
+    return (carCache = out);
+  })().catch((e) => { carLoading = null; throw e; });
+  return carLoading;
+}
+
+function buildCarKart(THREE, spec, car) {
+  const group = new THREE.Group();
+  group.userData.three = THREE;
+  const rig = car.object.clone(true);
+  const mats = new Map(), paint = [];
+  const matFor = (name) => {
+    if (mats.has(name)) return mats.get(name);
+    const kd = car.kd[name] || [0.5, 0.5, 0.5], shade = car.paint[name];
+    const m = shade !== undefined
+      ? new THREE.MeshStandardMaterial({ color: new THREE.Color(spec.color).multiplyScalar(shade), metalness: 0.1, roughness: 0.35 })
+      : new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(kd[0], kd[1], kd[2], THREE.SRGBColorSpace), metalness: 0.05, roughness: /windows/i.test(name) ? 0.5 : 0.7 });
+    if (/lights$/i.test(name)) { m.emissive.copy(m.color); m.emissiveIntensity = 0.6; }
+    if (shade !== undefined) paint.push(m);
+    mats.set(name, m);
+    return m;
+  };
+  rig.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = Array.isArray(o.material) ? o.material.map((m) => matFor(m.name)) : matFor(o.material.name);
+    o.castShadow = true; o.receiveShadow = true;
+  });
+  group.add(rig);
+  // shortcut: model has no wheel nodes with pivots (OBJ wheels are baked in model space), so no
+  // wheel spin/steer for model karts; add when we switch to GLB with named parts.
+  group.userData.parts = { body: rig, chassis: null, wheels: [], driver: null, helmet: null, visor: null,
+    exhaust: [], flame: [], shield: null, spark: null, shadowBlob: null, rig, paint, model: car.file };
+  return group;
+}
+
+// Effect parts (shield, turbo flames, spark, airborne shadow) sized from the measured body box.
+function addEffects(THREE, group) {
+  const parts = group.userData.parts;
+  group.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(parts.rig), size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
+
+  const shield = new THREE.Mesh(new THREE.SphereGeometry(0.5 * Math.hypot(size.x, size.z) * 0.85, 24, 24),
+    new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.1, metalness: 0.8, transparent: true, opacity: 0, emissive: 0xffff00, emissiveIntensity: 0 }));
+  shield.position.copy(mid); shield.visible = false;
+  group.add(shield); parts.shield = shield;
+
+  // turbo flames: unit-length additive cones pointing -Z (scale.z = length), white-hot inner core
+  const additive = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  const flameGeo = new THREE.ConeGeometry(0.2, 1, 16).rotateX(-Math.PI / 2).translate(0, 0, -0.5);
+  for (const side of [-1, 1]) {
+    const flame = new THREE.Mesh(flameGeo, additive(FLAME_COLORS[0], 0.85));
+    const core = new THREE.Mesh(flameGeo, additive(0xffffff, 0.7));
+    core.scale.set(0.45, 0.45, 0.6);
+    flame.add(core);
+    flame.position.set(side * size.x * 0.28, box.min.y + Math.min(0.45, size.y * 0.3), box.min.z + 0.05);
+    flame.visible = false;
+    group.add(flame); parts.flame.push(flame);
+  }
+
+  const spark = new THREE.Mesh(new THREE.IcosahedronGeometry(0.10, 2), new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.1, metalness: 0.5, transparent: true, opacity: 0.7, emissive: 0xffffff, emissiveIntensity: 2.0 }));
+  spark.position.set(0, 0.1, box.min.z); spark.visible = false;
+  group.add(spark); parts.spark = spark;
+
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(1.5, 24), new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0.3, transparent: true }));
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.set(0, 0.02, 0);
+  shadow.scale.setScalar(Math.max(0.2, Math.min(1.2, size.x / 3.0)));
+  shadow.userData.base = shadow.scale.x;
+  shadow.visible = false;
+  group.add(shadow); parts.shadowBlob = shadow;
+  return group;
+}
+
+// idx = racer index (stable car map). Falls back to the procedural lathe kart without models.
+export function buildKartModel(THREE, spec, idx = spec.id ?? 0) {
+  const car = carCache && carCache[((idx % carCache.length) + carCache.length) % carCache.length];
+  return addEffects(THREE, car ? buildCarKart(THREE, spec, car) : buildLatheKart(THREE, spec));
+}
+
+function buildLatheKart(THREE, spec) {
   const group = new THREE.Group();
   group.userData.three = THREE;   // updateKartModel has no THREE parameter (see INTERFACES §4)
 
@@ -241,88 +386,20 @@ export function buildKartModel(THREE, spec) {
 
   group.add(driverGroup);
   group.userData.parts.driver = driverGroup;
-
-  // ----- Boost shield (inactive until boost/star) -----
-  const shieldGeo = new THREE.SphereGeometry(1.85, 24, 24);
-  const shieldMat = new THREE.MeshStandardMaterial({
-    color: 0xffff00, roughness: 0.1, metalness: 0.8,
-    transparent: true, opacity: 0.0,
-    emissive: 0xffff00, emissiveIntensity: 0.0
-  });
-  const shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
-  shieldMesh.castShadow = false;
-  shieldMesh.receiveShadow = false;
-  shieldMesh.visible = false;
-  group.add(shieldMesh);
-  group.userData.parts.shield = shieldMesh;
-
-  // ----- Boost flame pair (under rear bumper) -----
-  for (let side of [-1, 1]) {
-    const flameGeo = new THREE.ConeGeometry(0.28, 0.85, 16);
-    const flameMat = new THREE.MeshStandardMaterial({
-      color: 0xff6600, roughness: 0.2, metalness: 0.7,
-      transparent: true, opacity: 0.0,
-      emissive: 0xff3300, emissiveIntensity: 0.0
-    });
-    const flameMesh = new THREE.Mesh(flameGeo, flameMat);
-    flameMesh.castShadow = true;
-    flameMesh.receiveShadow = true;
-    flameMesh.position.set(side * 0.65, 0.24, -1.15);
-    flameMesh.rotation.x = -Math.PI / 2;
-    flameMesh.visible = false;
-    group.add(flameMesh);
-    group.userData.parts.flame.push(flameMesh);
-  }
-
-  // ----- Drift spark -----
-  const sparkGeo = new THREE.IcosahedronGeometry(0.10, 2);
-  const sparkMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff, roughness: 0.1, metalness: 0.5,
-    transparent: true, opacity: 0.7, emissive: 0xffffff, emissiveIntensity: 2.0
-  });
-  const sparkMesh = new THREE.Mesh(sparkGeo, sparkMat);
-  sparkMesh.castShadow = false;
-  sparkMesh.receiveShadow = false;
-  sparkMesh.visible = false;
-  group.add(sparkMesh);
-  group.userData.parts.spark = sparkMesh;
-
-  // ----- Shadow blob (air time) -----
-  const shadowGeo = new THREE.CircleGeometry(1.5, 24);
-  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0.3, transparent: true });
-  const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
-  shadowMesh.castShadow = false;
-  shadowMesh.receiveShadow = false;
-  shadowMesh.position.set(0, 0.01, 0);
-  shadowMesh.rotation.x = -Math.PI / 2;
-  shadowMesh.visible = false;
-  group.add(shadowMesh);
-  group.userData.parts.shadowBlob = shadowMesh;
+  group.userData.parts.paint = [matBody];
 
   // ----- ground contact and scale: measured, not guessed --------------------------------
   // The physics puts kart.pos.y exactly on the road surface and frames the kart with a chase
   // camera, so the model must (a) occupy a believable go-kart footprint and (b) rest its
-  // wheels at y = 0. Both are computed from the built geometry: effect parts (shield, flame,
-  // spark, shadow blob) are excluded from the silhouette measurement on purpose.
+  // wheels at y = 0. Effect parts are added afterwards (addEffects), outside the rig.
   const rig = new THREE.Group();
-  for (const child of group.children.slice()) {
-    if (child === shadowMesh) continue;
-    rig.add(child);
-  }
+  for (const child of group.children.slice()) rig.add(child);
   group.add(rig);
   group.userData.parts.rig = rig;
 
   const parts = group.userData.parts;
-  const effects = new Set([parts.shadowBlob, parts.spark, parts.shield].filter(Boolean));
-  for (const f of parts.flame || []) effects.add(f);
-
   group.updateMatrixWorld(true);
-  const bodyBox = new THREE.Box3(), piece = new THREE.Box3();
-  for (const child of rig.children) {
-    if (effects.has(child)) continue;
-    piece.setFromObject(child);
-    bodyBox.union(piece);
-  }
+  const bodyBox = new THREE.Box3().setFromObject(rig), piece = new THREE.Box3();
   const dim = new THREE.Vector3();
   bodyBox.getSize(dim);
   if (isFinite(dim.x) && dim.x > 0.2 && dim.z > 0.2) {
@@ -334,12 +411,6 @@ export function buildKartModel(THREE, spec) {
   const wheelBox = new THREE.Box3();
   for (const w of parts.wheels) { piece.setFromObject(w); wheelBox.union(piece); }
   if (isFinite(wheelBox.min.y) && Math.abs(wheelBox.min.y) < 4) rig.position.y = -wheelBox.min.y;
-
-  // the fake ground shadow follows the kart's real footprint
-  const blobScale = Math.max(0.2, Math.min(1.2, (dim.x * (rig.scale.x || 1)) / 3.0));
-  shadowMesh.scale.setScalar(blobScale);
-  shadowMesh.position.set(0, 0.02, 0);
-
   return group;
 }
 
@@ -365,7 +436,7 @@ export function updateKartModel(group, kart, dt) {
   // World position + height
   group.position.set(kart.pos.x, kart.pos.y, kart.pos.z);
 
-  // Boost shield & flame
+  // Boost shield
   const boostTime = kart.boost.time;
   const shield = parts.shield;
   const shieldMat = shield.material;
@@ -373,19 +444,24 @@ export function updateKartModel(group, kart, dt) {
     shieldMat.opacity = Math.min(0.45, boostTime * 0.3);
     shieldMat.emissiveIntensity = Math.min(1.5, boostTime * 0.6);
     shield.visible = true;
-    parts.flame.forEach((flame) => {
-      const fmat = flame.material;
-      flame.visible = true;
-      flame.scale.y = 0.8 + Math.min(2.0, boostTime * 1.5);
-      fmat.opacity = Math.min(0.8, boostTime * 0.4);
-      fmat.emissiveIntensity = Math.min(1.2, boostTime * 0.7);
-    });
   } else {
     shield.visible = false;
     shieldMat.opacity = 0.0;
     shieldMat.emissiveIntensity = 0.0;
-    parts.flame.forEach((flame) => { flame.visible = false; });
   }
+
+  // Turbo flames: tier colour while charging a drift, full length while boosting (§8)
+  const look = flameLook(kart, group.userData.boostTier ?? 1);
+  if (kart.drift.on && kart.drift.tier >= 0) group.userData.boostTier = Math.min(2, kart.drift.tier);
+  else if (!look.on) group.userData.boostTier = 1;   // a plain mushroom/pad boost burns orange
+  parts.flame.forEach((flame) => {
+    flame.visible = look.on;
+    if (!look.on) return;
+    const flick = 0.85 + Math.random() * 0.3;
+    flame.scale.set(flick, flick, look.len * (0.8 + Math.random() * 0.4));
+    flame.material.color.setHex(FLAME_COLORS[look.tier]);
+    flame.material.opacity = 0.7 + Math.random() * 0.25;
+  });
 
   // Drift spark (colour per tier)
   const spark = parts.spark;
@@ -408,10 +484,9 @@ export function updateKartModel(group, kart, dt) {
     shield.visible = true;
   }
 
-  // Cloud invisibility -> body transparency
-  const bodyMat = parts.body.material;
-  bodyMat[0].opacity = kart.invisible > 0 ? 0.25 : 1.0;
-  bodyMat[0].transparent = kart.invisible > 0;
+  // Cloud invisibility -> paint transparency
+  const paintMats = parts.paint || [];
+  for (const m of paintMats) { m.opacity = kart.invisible > 0 ? 0.25 : 1.0; m.transparent = kart.invisible > 0; }
 
   // Spin-out wobble
   if (kart.spin > 0) {
@@ -425,15 +500,14 @@ export function updateKartModel(group, kart, dt) {
   // Hit flash emissive pulse
   if (kart.hitFlash > 0) {
     const intensity = Math.min(1.0, kart.hitFlash * 5.0);
-    bodyMat[0].emissive = new THREE.Color(0xff0000).multiplyScalar(intensity);
-    bodyMat[0].emissiveIntensity = intensity;
+    for (const m of paintMats) { m.emissive.setHex(0xff0000).multiplyScalar(intensity); m.emissiveIntensity = intensity; }
   }
 
   // Shadow blob under airborne kart
   const shadow = parts.shadowBlob;
   if (kart.air.y > 0.3) {
     shadow.visible = true;
-    shadow.scale.setScalar(1.0 + kart.air.y * 2.0);
+    shadow.scale.setScalar((shadow.userData.base || 1) * (1.0 + kart.air.y * 2.0));
     shadow.material.opacity = Math.max(0.0, 0.3 - kart.air.y * 0.15);
   } else {
     shadow.visible = false;

@@ -129,6 +129,24 @@ function lathe(THREE, prof, seg = 24) {
   return weldNormals(g);
 }
 
+// AG section weight per polyline index: 0 outside track.agRanges, cosine ramp to 1 over the first
+// and last `ramp` metres (matches the core's bank ramp). Wrap-aware; tolerates missing agRanges.
+export function agWeights(track, ramp = 30) {
+  const n = track.pl.count, W = new Float32Array(n), cum = track.cum, loop = track.loop;
+  const arc = (a, b) => (((cum[b] - cum[a]) % loop) + loop) % loop;
+  for (const r of track.agRanges || []) {
+    const len = arc(r.i0, r.i1);
+    for (let i = r.i0, g = 0; g < n; i = (i + 1) % n, g++) {
+      const s = arc(r.i0, i), e = Math.min(s, len - s);
+      W[i] = Math.max(W[i], 0.5 - 0.5 * Math.cos(Math.PI * clamp(e / ramp, 0, 1)));
+      if (i === r.i1) break;
+    }
+  }
+  return W;
+}
+const AG_EXT = 1.2;      // AG road runs this far past half so the bank climb (half + 1.0) stays on asphalt
+const AG_CYAN = 0x29e6ff;
+
 // ===================================================================== main
 export function buildTrackScene(THREE, track, theme) {
   theme = Object.assign({ grass: 0x5f9a4a, road: 0x53565e, curb: 0xd8232a, wall: 0xe8e1d5, trees: 0x2f7a3a }, track.def?.theme || {}, theme || {});
@@ -155,6 +173,11 @@ export function buildTrackScene(THREE, track, theme) {
   const cornerAt = new Uint8Array(n);
   for (let i = 0; i < n; i++) if (Math.abs(curv[i]) > 1 / 60) for (let k = -4; k <= 4; k++) cornerAt[(i + k + n) % n] = 1;
 
+  // AG: road edge moves out, and barriers sit on the banked surface (height via surfaceY)
+  const W = agWeights(track);
+  const edgeOff = (j) => half(j) + AG_EXT * W[j];
+  const edgeY = (j, sg) => (W[j] > 0 ? track.surfaceY(PX(j) + sg * edgeOff(j) * MX[j], PZ(j) + sg * edgeOff(j) * MZ[j]) : EV(j));
+
   // ================================================================= road ribbon
   const U = [-1, -0.965, -0.93];
   for (let u = -0.8; u <= 0.8001; u += 0.1) U.push(+u.toFixed(3));
@@ -164,15 +187,15 @@ export function buildTrackScene(THREE, track, theme) {
     const rows = n + 1, vc = rows * COLS;
     const pos = new Float32Array(vc * 3), nor = new Float32Array(vc * 3), col = new Float32Array(vc * 3);
     const base = C(theme.road), line = C(theme.road).multiplyScalar(0.8), white = C(0xf2f2ee);
-    const padTint = C(0x2a9df4);
+    const padTint = C(0x2a9df4), agTint = C(0x123a5c);
     const tmp = new THREE.Color();
     for (let r = 0; r < rows; r++) {
-      const i = r % n, h = half(i), mx = MX[i], mz = MZ[i];
+      const i = r % n, h = edgeOff(i), mx = MX[i], mz = MZ[i];
       const lineOff = -clamp(curv[i] * 30, -1, 1) * 0.55 * h;   // racing line hugs the inside
       for (let k = 0; k < COLS; k++) {
         const side = U[k] * h, x = PX(i) + side * mx, z = PZ(i) + side * mz;
-        let y = EV(i);
         const q = track.sample(x, z, i);
+        let y = W[i] > 0 ? q.y : EV(i);   // AG: banked cross-section straight from surfaceY
         let nx = -q.slopeX, ny = 1, nz = -q.slopeZ;
         if (Math.abs(idxDelta(pl, i, q.idx)) > 6) { y = Math.min(y, q.y) - 0.035; }   // under the other leg
         const v = r * COLS + k;
@@ -184,6 +207,7 @@ export function buildTrackScene(THREE, track, theme) {
         tmp.copy(base).lerp(line, Math.exp(-((dl / 1.6) ** 2)) * 0.85).multiplyScalar(grain);
         if (Math.abs(U[k]) >= 0.96) tmp.copy(white).multiplyScalar(0.97 + 0.03 * grain);
         if (q.pad) tmp.lerp(padTint, 0.25);
+        if (W[i] > 0) tmp.lerp(agTint, 0.4 * W[i]);
         col[v * 3] = tmp.r; col[v * 3 + 1] = tmp.g; col[v * 3 + 2] = tmp.b;
       }
     }
@@ -306,7 +330,7 @@ export function buildTrackScene(THREE, track, theme) {
     const prof = [[KW, -0.012], [KW * 0.55, 0.06], [0, 0.075]];   // [inset from edge, height]
     let block = 0;
     for (let i = 0; i < n; i++) {
-      if (!cornerAt[i]) { block = 0; continue; }
+      if (!cornerAt[i] || W[i] > 0 || W[(i + 1) % n] > 0) { block = 0; continue; }   // no kerbs on the bank
       const i1 = (i + 1) % n;
       for (const sg of [-1, 1]) {
         for (let hh = 0; hh < 2; hh++) {
@@ -389,10 +413,10 @@ export function buildTrackScene(THREE, track, theme) {
           const run = runs[rI];
           const v0 = P.length / 3;
           for (const j of [i, i1]) {
-            const hj = half(j), mx = MX[j], mz = MZ[j], y0 = EV(j);
+            const hj = edgeOff(j), mx = MX[j], mz = MZ[j], y0 = edgeY(j, sg), drop = y0 - EV(j);
             for (const [o, hy, no, nh] of run) {
               const sd = sg * (hj + o);
-              P.push(PX(j) + sd * mx, y0 + hy, PZ(j) + sd * mz);
+              P.push(PX(j) + sd * mx, y0 + (hy <= WB + 0.01 ? hy - drop : hy), PZ(j) + sd * mz);   // banked wall reaches the ground
               const nx = no * sg * mx, nz = no * sg * mz, l = Math.hypot(nx, nh, nz) || 1;
               N.push(nx / l, nh / l, nz / l);
               let c = panel;
@@ -430,7 +454,7 @@ export function buildTrackScene(THREE, track, theme) {
       for (let i = 0; i < n; i++) {
         if (wallSkip[si][i]) continue;
         const step = cornerAt[i] ? 3 : 6;
-        if (i % step) continue;
+        if (i % step || W[i] > 0) continue;   // AG bank gets the neon rail instead of posts
         const sd = sg * (half(i) + WT + 0.12);
         list.push({ x: PX(i) + sd * MX[i], z: PZ(i) + sd * MZ[i], y: EV(i), corner: cornerAt[i] });
       }
@@ -562,6 +586,88 @@ export function buildTrackScene(THREE, track, theme) {
     return m;
   })();
   group.add(gantry);
+
+  // ================================================================= AG sections: underglow, rails, entry gantry
+  const ag = new THREE.Group(); ag.name = 'ag';
+  if ((track.agRanges || []).length) {
+    const cyan = C(AG_CYAN);
+    // underglow: additive overlay sharing the road's vertices (only AG rows indexed), bright at the
+    // edges with a light band every 8 m so speed reads on the bank
+    const rp = road.geometry.attributes.position, gcol = new Float32Array(rp.count * 3), gi = [];
+    for (let r = 0; r <= n; r++) {
+      const i = r % n, w = W[i], band = (cum[i] % 8) < 1.2 ? 0.35 : 0;
+      for (let k = 0; k < COLS; k++) {
+        const f = w * (0.1 + 0.8 * smoothstep((Math.abs(U[k]) - 0.55) / 0.45) + band), v = r * COLS + k;
+        gcol[v * 3] = cyan.r * f; gcol[v * 3 + 1] = cyan.g * f; gcol[v * 3 + 2] = cyan.b * f;
+      }
+      if (r < n && w > 0 && W[(r + 1) % n] > 0) for (let k = 0; k < COLS - 1; k++) {
+        const a = r * COLS + k, b = a + COLS;
+        gi.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute('position', rp);
+    gg.setAttribute('color', new THREE.BufferAttribute(gcol, 3));
+    gg.setIndex(gi);
+    gg.computeBoundingSphere();
+    const glow = new THREE.Mesh(gg, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+    glow.name = 'ag-underglow';
+    ag.add(glow);
+
+    const neon = new THREE.MeshBasicMaterial({ color: AG_CYAN, toneMapped: false });
+    const rails = [], signs = [], frames = [];
+    for (const rg of track.agRanges) {
+      // glowing rail along the top of each banked barrier
+      for (const sg of [-1, 1]) {
+        const pts = [];
+        for (let i = rg.i0, g = 0; g < n; i = (i + 1) % n, g++) {
+          if (W[i] > 0 || i === rg.i0 || i === rg.i1) {
+            const sd = sg * (edgeOff(i) + CAPR);
+            pts.push(new THREE.Vector3(PX(i) + sd * MX[i], edgeY(i, sg) + WH + CAPR * 0.7 + 0.08, PZ(i) + sd * MZ[i]));
+          }
+          if (i === rg.i1) break;
+        }
+        if (pts.length < 2) continue;
+        const tg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length * 2, 0.12, 8, false);
+        tg.deleteAttribute('uv');
+        rails.push(paint(THREE, tg, cyan));
+      }
+      // entry gantry at the range start: pillars + crossbar frame, glowing "> AG <" sign
+      const sp = track.pointAt(cum[rg.i0], 0), span = sp.half + 1.9;
+      const steel = C(0x3a3f47), parts = [], glowParts = [];
+      for (const sx of [-1, 1]) parts.push(paint(THREE, xform(THREE, lathe(THREE, [[0, -1], [0.55, -1], [0.55, 0.2], [0.36, 0.5], [0.32, 6.4], [0.38, 6.6], [0, 6.62]], 20), { x: sx * span }), steel));
+      parts.push(paint(THREE, box(THREE, span * 2 + 0.8, 0.5, 0.5).translate(0, 6.4, 0), steel));
+      parts.push(paint(THREE, xform(THREE, extrudeShape(THREE, roundRectShape(THREE, 6.4, 1.7, 0.2), 0.3, 0.04), { y: 5.3, z: -0.15 }), C(0x0d1220)));
+      const lit = (geo) => { geo.deleteAttribute?.('uv'); glowParts.push(paint(THREE, geo, C(0xffffff))); };
+      const zf = -0.24;   // the face oncoming karts see (travel is local +Z); their right hand is local -X
+      lit(box(THREE, 0.16, 1.1, 0.06).rotateZ(0.36).translate(0.95 + 0.2, 5.3, zf));    // A
+      lit(box(THREE, 0.16, 1.1, 0.06).rotateZ(-0.36).translate(0.95 - 0.2, 5.3, zf));
+      lit(box(THREE, 0.42, 0.12, 0.06).translate(0.95, 5.15, zf));
+      lit(new THREE.TorusGeometry(0.42, 0.08, 8, 28, 1.6 * Math.PI).rotateZ(0.95 * Math.PI).translate(-0.95, 5.3, zf));   // G
+      lit(box(THREE, 0.3, 0.12, 0.06).translate(-0.95 - 0.27, 5.3, zf));
+      for (const sx of [-1, 1]) for (let c = 0; c < 2; c++) {     // chevrons pointing at the letters
+        const s = new THREE.Shape(), x0 = sx * (2.7 - c * 0.45), d = -sx;
+        const pts = [[0, 0.45], [0.18, 0.45], [0.42, 0], [0.18, -0.45], [0, -0.45], [0.24, 0]].map(([x, y]) => [x0 + x * d, y]);
+        s.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < pts.length; k++) s.lineTo(pts[k][0], pts[k][1]); s.closePath();
+        const cg = extrudeShape(THREE, s, 0.03, 0);
+        paint(THREE, xform(THREE, cg, { y: 5.3, z: zf - 0.03 }), cyan);
+        glowParts.push(cg);
+      }
+      const xA = new THREE.Vector3(sp.nx, 0, sp.nz), zA = new THREE.Vector3().crossVectors(xA, new THREE.Vector3(0, 1, 0));
+      const basis = new THREE.Matrix4().makeBasis(xA, new THREE.Vector3(0, 1, 0), zA).setPosition(sp.x, track.surfaceY(sp.x, sp.z), sp.z);
+      frames.push(merge(THREE, parts).applyMatrix4(basis));
+      signs.push(merge(THREE, glowParts).applyMatrix4(basis));
+    }
+    if (rails.length) { const m = new THREE.Mesh(merge(THREE, rails), neon); m.name = 'ag-rails'; ag.add(m); }
+    if (frames.length) {
+      const f = new THREE.Mesh(merge(THREE, frames), matStd({ roughness: 0.5, metalness: 0.3 }));
+      f.name = 'ag-gantry'; f.castShadow = true; f.receiveShadow = true; ag.add(f);
+      const s = new THREE.Mesh(merge(THREE, signs), new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }));
+      s.name = 'ag-sign'; ag.add(s);
+    }
+  }
+  group.add(ag);
 
   // ================================================================= instanced scenery
   const props = new THREE.Group(); props.name = 'props';
@@ -799,6 +905,6 @@ export function buildTrackScene(THREE, track, theme) {
   }
   group.add(props);
 
-  group.userData = { padMaterial: padMat, startS, extras: { marks, pads, posts, gantry } };
-  return { group, meshes: { road, curb, wall, ground, props, marks, pads, posts, gantry } };
+  group.userData = { padMaterial: padMat, startS, extras: { marks, pads, posts, gantry, ag } };
+  return { group, meshes: { road, curb, wall, ground, props, marks, pads, posts, gantry, ag } };
 }

@@ -12,7 +12,7 @@ import { createAI, stepAI } from './core/ai.js';
 import { createStage } from './render/stage.js';
 import { createCameraRig } from './render/cameraRig.js';
 import { buildTrackScene } from './render/trackMesh.js';
-import { buildKartModel, updateKartModel, buildItemProps, setHeldItem } from './render/kartModel.js';
+import { buildKartModel, updateKartModel, buildItemProps, setHeldItem, loadKartModels } from './render/kartModel.js';
 import { createFX } from './render/fx.js';
 import { createHUD } from './ui/hud.js';
 import { createMenu } from './ui/menu.js';
@@ -34,6 +34,8 @@ const DEBUG_HUD = qs.get('debug') === '1';   // raw phase/clock readout for the 
 function boot() {
   const canvas = document.getElementById('game');
   const uiRoot = document.getElementById('ui');
+  // preload real kart bodies; buildKartModel falls back to procedural until/if this fails
+  loadKartModels(THREE).catch(() => {});
   const stage = createStage(THREE, canvas, { keepBacking: allAI || !!shotName });
   if (NO_SHADOW) stage.setShadows(false);
   const { renderer, scene } = stage;

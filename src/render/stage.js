@@ -3,11 +3,12 @@
 import { RENDER, CAM } from '../config.js';
 
 export function createStage(THREE, canvas, opts = {}) {
-  // keepBacking keeps the last drawn frame readable from JS — used by the headless harness and
-  // screenshot mode, where no compositor runs to present the canvas.
+  // preserveDrawingBuffer stays ON: some macOS display paths (observed: external screen at dpr=1,
+  // Safari+Firefox+Chrome alike) never composite a non-preserved WebGL canvas — draws execute
+  // (411 calls, no GL errors) but the screen stays black. Cost: one blit per frame.
   const renderer = new THREE.WebGLRenderer({
     canvas, antialias: true, powerPreference: 'high-performance',
-    preserveDrawingBuffer: !!opts.keepBacking,
+    preserveDrawingBuffer: true,
   });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;

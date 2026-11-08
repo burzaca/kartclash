@@ -200,10 +200,10 @@ export function createMenu(root, opts) {
     legend.appendChild(globalText);
     const camHint = document.createElement('b');
     camHint.textContent = 'CAMERA';
-    const camText = document.createElement('i');
-    camText.textContent = `C changes the chase distance (close / normal / far). Currently: ${(info && info.camera) || 'normal'}. Your choice is remembered on this device.`;
+    const camValue = document.createElement('i');
+    camValue.textContent = 'Each player changes their own chase distance: P1 presses C, P2 presses M (close / normal / far). Your choice is remembered on this device.';
     legend.appendChild(camHint);
-    legend.appendChild(camText);
+    legend.appendChild(camValue);
     menuRoot.appendChild(legend);
 
     // button container
@@ -392,10 +392,12 @@ export function createMenu(root, opts) {
         if (['ArrowUp','KeyW','ArrowDown','KeyS'].includes(e.code)) {
           step = (e.code === 'ArrowUp' || e.code === 'KeyW') ? -1 : 1;
         } else if (e.key === 'Enter') {
-          // activate selected button
+          // activate the focused button if the browser moved focus (Tab); else the selected one
           const btns = menuRoot.querySelectorAll('.kc-btn');
-          if (btns[selectedIdx]) {
-            const action = btns[selectedIdx].dataset.action;
+          const focused = (e.target && e.target.classList && e.target.classList.contains('kc-btn')) ? e.target : null;
+          const btn = focused || btns[selectedIdx];
+          if (btn) {
+            const action = btn.dataset.action;
             cb(action);
             // after action we return to title (or keep current mode)
             if (action === 'start' || action === 'resume' || action === 'quit') {
@@ -412,6 +414,15 @@ export function createMenu(root, opts) {
         }
       }
       document.addEventListener('keydown', handler);
+      // mouse: clicking a button fires its action directly (this was keyboard-only — players
+      // clicked their option, nothing happened, and had to press Enter; that was the report)
+      menuRoot.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest('.kc-btn') : null;
+        if (!btn) return;
+        const action = btn.dataset.action;
+        cb(action);
+        if (action === 'start' || action === 'resume' || action === 'quit') menu.hide();
+      });
       // return a teardown function so the caller can clean up
       return () => document.removeEventListener('keydown', handler);
     }

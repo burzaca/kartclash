@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { TRACKS, KART, ITEM, ITEMS, GAME, RACE, PLAYERS, AI_DRIVERS } from '../src/config.js';
+import { TRACKS, KART, ITEM, ITEMS, GAME, RACE, PLAYERS, AI_DRIVERS, CAM } from '../src/config.js';
 import { mulberry32 } from '../src/foundation.js';
 import { buildTrack } from '../src/core/track.js';
 import { createKart, stepKart, resolveKartCollisions, recoverKart, resetKart } from '../src/core/kart.js';
@@ -254,4 +254,13 @@ test('menu/HUD overlays are absolute and the empty menu hides itself', () => {
   assert.match(menu, /\.kc-menu:empty \{ display: none; \}/);
   assert.match(menu, /\.kc-menu \{[\s\S]*?position: absolute; inset: 0;/);
   assert.match(hud, /\.kc-hud \{ position: absolute; inset: 0;/);
+});
+
+test('playtest round 2026-11-08b: per-player cameras, clickable menu, honest banana', () => {
+  assert.deepEqual(CAM.camKeys, { KeyC: 0, KeyM: 1 }, 'per-player camera keys missing from config');
+  const menu = readFileSync(new URL('../src/ui/menu.js', import.meta.url), 'utf8');
+  assert.match(menu, /menuRoot\.addEventListener\('click'/, 'menu buttons are not clickable');
+  const props = readFileSync(new URL('../src/render/kartModel.js', import.meta.url), 'utf8');
+  assert.match(props, /export function modelSource\(\)/);
+  assert.match(props, /const R = Math\.max\(0\.35, effect\.radius \|\| 0\.3\)/, 'banana mesh must be sized to its hit radius');
 });

@@ -14,6 +14,10 @@ export const KART_LEN = 2.35;
 export const DRIVER_H = 1.15;   // driver's total height (matches the old kart silhouette)
 let kartCache = null, kartLoading = null;
 
+// Which body the next kart will get — surfaced in the corner stamp so a player and I can
+// agree on whether the GLB actually loaded on their machine.
+export function modelSource() { return kartCache ? 'glb' : 'lathe'; }
+
 // Parsed material name -> spec colour, or null to keep the parsed colour (Dark iron, Rubber).
 export function repaintFor(name, spec) {
   return name === 'Green paint' ? spec.color : name === 'Steel' ? spec.trim : null;
@@ -691,17 +695,44 @@ export function buildItemProps(THREE) {
 
       switch (effect.kind) {
         case 'shell': {
-          const mesh = new THREE.Mesh(new THREE.SphereGeometry(effect.radius, 24, 24),
-            new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.3, metalness: 0.7 }));
-          mesh.castShadow = true; mesh.receiveShadow = true;
-          group.add(mesh);
+          // a green shell, not a green ball: domed body, belt, and the spikes that make it read
+          const shell = new THREE.Mesh(new THREE.SphereGeometry(effect.radius, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62),
+            new THREE.MeshStandardMaterial({ color: 0x2ecf3f, roughness: 0.35, metalness: 0.3, side: THREE.DoubleSide }));
+          shell.rotation.x = Math.PI;              // dome opens downward
+          shell.castShadow = true; shell.receiveShadow = true;
+          group.add(shell);
+          const cap = new THREE.Mesh(new THREE.SphereGeometry(effect.radius * 0.98, 20, 8, 0, Math.PI * 2, Math.PI * 0.62, Math.PI * 0.38),
+            new THREE.MeshStandardMaterial({ color: 0x1b7a26, roughness: 0.5 }));
+          cap.rotation.x = Math.PI;
+          group.add(cap);
+          const belt = new THREE.Mesh(new THREE.TorusGeometry(effect.radius * 0.96, effect.radius * 0.10, 8, 20),
+            new THREE.MeshStandardMaterial({ color: 0xf2e9c9, roughness: 0.5 }));
+          belt.rotation.x = Math.PI / 2;
+          group.add(belt);
+          for (let s = 0; s < 6; s++) {
+            const spike = new THREE.Mesh(new THREE.ConeGeometry(effect.radius * 0.16, effect.radius * 0.55, 6),
+              new THREE.MeshStandardMaterial({ color: 0xf2e9c9, roughness: 0.5 }));
+            const a = (s / 6) * Math.PI * 2;
+            spike.position.set(Math.cos(a) * effect.radius * 0.9, 0, Math.sin(a) * effect.radius * 0.9);
+            spike.rotation.z = -Math.PI / 2; spike.rotation.y = -a;   // cone axis -> outward
+            group.add(spike);
+          }
           break;
         }
         case 'banana': {
-          const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.12, 16),
-            new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.5, metalness: 0.2 }));
+          // the hit radius is 1.3 m but this used to draw a fixed 0.3 m flat disc — players got
+          // "stunned by an invisible something". Draw at the real size, banana-shaped.
+          const R = Math.max(0.35, effect.radius || 0.3);
+          const mesh = new THREE.Mesh(new THREE.TorusGeometry(R * 0.9, R * 0.26, 10, 20, Math.PI * 1.15),
+            new THREE.MeshStandardMaterial({ color: 0xffd400, roughness: 0.45, metalness: 0.05 }));
+          mesh.rotation.x = -Math.PI / 2;              // crescent lies flat
+          mesh.position.y = -R * 0.75;                 // sit on the road, not at the hit-center
           mesh.castShadow = true; mesh.receiveShadow = true;
           group.add(mesh);
+          const stem = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.10, R * 0.12, R * 0.35, 6),
+            new THREE.MeshStandardMaterial({ color: 0x6b4a1f, roughness: 0.7 }));
+          stem.position.set(R * 0.55, -R * 0.55, 0);
+          group.add(stem);
           break;
         }
         case 'zap': {

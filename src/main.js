@@ -12,7 +12,7 @@ import { createAI, stepAI } from './core/ai.js';
 import { createStage } from './render/stage.js';
 import { createCameraRig } from './render/cameraRig.js';
 import { buildTrackScene } from './render/trackMesh.js';
-import { buildKartModel, updateKartModel, buildItemProps, setHeldItem, loadKartModels } from './render/kartModel.js';
+import { buildKartModel, updateKartModel, buildItemProps, setHeldItem, loadKartModels, modelSource } from './render/kartModel.js';
 import { createFX } from './render/fx.js';
 import { createHUD } from './ui/hud.js';
 import { createMenu } from './ui/menu.js';
@@ -37,7 +37,7 @@ function boot() {
   // preload real kart bodies; buildKartModel falls back to procedural until/if this fails.
   // If a race starts before the fetch finishes (slow CDN), swap the fallback karts in-place
   // once the models are ready, so the look never stays wrong.
-  loadKartModels(THREE).then(() => swapToModelKarts()).catch(() => {});
+  loadKartModels(THREE).then(() => swapToModelKarts()).catch((e) => console.error('kart model load failed — procedural karts in use', e));
   const stage = createStage(THREE, canvas, { keepBacking: allAI || !!shotName });
   if (NO_SHADOW) stage.setShadows(false);
   const { renderer, scene } = stage;
@@ -52,9 +52,12 @@ function boot() {
 
   // Camera distance is the player's choice, kept between visits.
   const CAM_PREF_KEY = '***';
-  const storedCam = (() => { try { return localStorage.getItem(CAM_PREF_KEY); } catch { return null; } })();
+  // Per-player: stored as { "0": "close", "1": "far" }; a bare string is the old single-player format.
+  const storedCams = (() => {
+    try { const raw = JSON.parse(localStorage.getItem(CAM_PREF_KEY) || 'null');
+      return typeof raw === 'string' ? { 0: raw } : (raw || {}); } catch { return {}; }
+  })();
   if (qs.get('cam')) rig.setPreset(qs.get('cam'));
-  else if (storedCam) rig.setPreset(storedCam);
 
   function buildWorld() {
     // tear down
@@ -121,7 +124,8 @@ function boot() {
       if (camSlots <= 0) break;
       if (!k.human && !allAI) continue;    // in the all-AI smoke run the cameras spectate the field
       camSlots--;
-      rig.addCamera();
+      const camIdxNew = rig.cams.length; rig.addCamera();
+      if (storedCams[String(camIdxNew)]) rig.setPresetFor(camIdxNew, storedCams[String(camIdxNew)]);
     }
   }
 
@@ -180,7 +184,7 @@ function boot() {
   // ("I keep getting the same pickup"). Pass ?seed=N to reproduce a session.
   const sessionRng = mulberry32(qs.get('seed') ? Number(qs.get('seed')) : ((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0));
   const taughtItemKey = new Set();     // humans who have been shown how to use an item, once
-  const toldHolding = new Set();
+  const toldHolding = new Set(); const blockedAt = new Map();
 
   // the player's own key, spelled out — "press SPACE", not "press the use key"
   function useKeyLabel(k) {
@@ -195,8 +199,11 @@ function boot() {
         if (!k.human) return;
         const pane = k.viewport ? k.viewport.i : 0;
         hud.pulseItem(pane);
-        if (!toldHolding.has(k.id)) {
-          toldHolding.add(k.id);
+        // first time explain it; afterwards keep a throttled reminder — a silent "cannot pick up"
+        // reads as a broken game (it was this player's report).
+        const nowT = race ? race.clock : 0;
+        if (!toldHolding.has(k.id) || nowT - (blockedAt.get(k.id) ?? -9) > 3.5) {
+          toldHolding.add(k.id); blockedAt.set(k.id, nowT);
           hud.banner('ITEM ALREADY IN HAND', `use it first: press ${useKeyLabel(k)}`, 2000, pane);
         }
       },
@@ -363,16 +370,20 @@ function boot() {
 
   // ---------- input plumbing ----------
   window.addEventListener('keydown', (e) => {
+    // a focused menu button owns its own Enter/arrows (the menu module handles activation)
+    if (e.target && e.target.closest && e.target.closest('.kc-btn')) return;
     // after the flag, Esc/Enter goes back to the title screen (it used to do nothing at all)
     if (started && race.phase === 'finished' && (e.code === 'Escape' || e.code === 'Enter')) { toTitle(); return; }
     if (started && race.phase !== 'finished' && GLOBAL_KEYS.pause.includes(e.code)) { paused = !paused; if (paused) menu.showPause(menuInfo()); else menu.hidePause(); return; }
     if (GLOBAL_KEYS.restart.includes(e.code)) { if (started) { race.start(); hud.hideResults(); } return; }
     if (started && race.phase === 'finished' && e.code === 'Enter') { race.start(); hud.hideResults(); return; }
     if (!started && e.code === 'Enter') { startRace(); return; }
-    if (e.code === 'KeyC') {
-      const name = rig.nextPreset();
-      try { localStorage.setItem(CAM_PREF_KEY, name); } catch { /* private mode */ }
-      hud.banner(`CAMERA: ${name.toUpperCase()}`, rig.presetLabel(), 1500);
+    const camFor = (CAM.camKeys || {})[e.code];
+    if (camFor !== undefined) {
+      if (camFor >= Math.max(1, humanCount)) { hud.banner('NOT IN THIS RACE', 'that player is not racing', 1200); return; }
+      const name = rig.nextPresetFor(camFor);
+      try { const all = JSON.parse(localStorage.getItem(CAM_PREF_KEY) || '{}'); all[String(camFor)] = name; localStorage.setItem(CAM_PREF_KEY, JSON.stringify(all)); } catch { /* private mode */ }
+      hud.banner(`P${camFor + 1} CAMERA: ${name.toUpperCase()}`, rig.presetLabel(name), 1500);
       return;
     }
     if (e.code === 'Tab') { e.preventDefault(); trackIdx = (trackIdx + 1) % TRACKS.length; if (!started) { buildWorld(); menu.showTitle(menuInfo()); } }
@@ -394,7 +405,7 @@ function boot() {
   // the corner stamp exists so a player and I can agree on which build they are looking at
   {
     const brand = document.getElementById('brand');
-    if (brand) brand.textContent = `${GAME.title} · three.js r${THREE.REVISION} · build ${GAME.build}`;
+    if (brand) brand.textContent = `${GAME.title} · three.js r${THREE.REVISION} · build ${GAME.build} · model:${modelSource()}`;
   }
   if (allAI) { startRace(); menu.hide(); }   // hands-off smoke run for the browser harness
   requestAnimationFrame(frame);

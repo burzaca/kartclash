@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-08.6',
+  build: '2026-11-08.7',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,
@@ -137,10 +137,12 @@ export const CAM = {
     far: { back: 12.5, up: 4.6, lead: 7.5 },
   },
   presetOrder: ['close', 'normal', 'far'],
-  followRate: 17.0,                        // higher = less lag; lag is what makes the kart feel dragged behind
+  followRate: 17.0,                        // look-target smoothing rate (position is rigid — see cameraRig)
+  yawRate: 7.0,                            // how fast the chase heading catches up with the kart's heading
+  camKeys: { KeyC: 0, KeyM: 1 },           // per-player camera cycling (P1 = C, P2 = M)
   fov: 64, fovBoost: 68, fovSpeed: 0.08,   // player asked: never fall far at speed; only a mild fov kick
   near: 0.5, far: 900,
-  speedPull: 0.6, upPull: 0.5, boostPull: 1.0,   // keep framing near-constant at any speed
+  speedPull: 0.3, upPull: 0.3, boostPull: 0.6,   // keep framing near-constant at any speed
   split: 'horizontal',                       // 2P: stacked halves (classic MK on TV)
   shakeDecay: 4.0,
 };

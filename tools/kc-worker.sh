@@ -10,6 +10,7 @@ case "$1" in
   ui)    A="free-model";   P="docs/prompts/w5-ui.txt" ;;
   ag)     A="claude-medium"; P="docs/prompts/w6-ag.txt" ;;
   models) A="claude-medium"; P="docs/prompts/w7-models.txt" ;;
+  kartglb) A="claude-medium"; P="docs/prompts/w8-kartglb.txt" ;;
   *) echo "unknown slug: $1"; exit 2 ;;
 esac
 # The prompt is passed through the environment and expanded INSIDE the interactive shell, so its

@@ -1,0 +1,17 @@
+You are WORKER C on Kart Clash v3. Repo: ~/projects/kartclash (you are in it).
+FIRST read docs/INTERFACES.md fully — section "UPGRADE PASS v2" §9 is your binding spec (the kart GLB job).
+Also read src/render/kartModel.js completely before editing.
+
+Do the §9 job end to end: GLB go-kart replaces the car OBJ path, per-racer repaint by material name,
+measured fit to the old kart footprint, driver seated on the measured seat, named wheels spin/steer,
+lathe kart stays as the fallback. Delete the vendored car assets/OBJ/MTL loaders and their tests.
+
+Hard rules: touch ONLY src/render/kartModel.js, tests/test_models.test.js, vendor/ (deleting car
+assets/loaders is allowed; do NOT touch index.html, src/main.js, src/core/*, src/config.js,
+src/render/trackMesh.js, src/ui/*). GLB parsing must never run inside node tests — test only pure
+helpers you factor out.
+
+Verification loop until green: npm run check && npm test && node tools/smoke-render.js
+Also run node tools/probe-camera.js — the player kart must read 19-33% of its viewport like today;
+if it drifts, your fit/driver scale is wrong, fix it (do not touch the camera or the probe).
+Finish by printing DONE, the files changed, the measured fit scale, and the final scaled kart bbox.

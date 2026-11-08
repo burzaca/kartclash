@@ -417,3 +417,36 @@ Hard rules for both workers: no new npm dependencies, no network access at runti
 not run inside node tests; guard with a lazy load API: `loadKartModels(THREE, fetchImpl)` called by
 main.js, which the PM wires; you just export it).
 
+
+## 9. v3: real go-kart models (WORKER C — `src/render/kartModel.js`, its tests, vendor assets)
+
+The Quaternius cars are REPLACED by one proper go-kart model, painted per racer (classic MK approach).
+
+Asset (vendored): `vendor/assets/karts/pixor.glb` — CC0 from pixor.art ("Kart — free 3D model &
+sprite sheet", https://pixor.art/library/vehicles/go-kart/). Verified structure: 1.30×0.66×1.85 m,
+928 tris, nodes `Kart_column/engine/floor/nose/seat/side_pods/steering_wheel/wheels_front(1,2)/wheels_back(1,2)`,
+materials by name: `Green paint` (#3fa84a body), `Steel` (#aab5c3), `Dark iron` (#434856), `Rubber` (#34343c).
+
+Required:
+1. Vendored `vendor/addons/GLTFLoader.js` + `vendor/utils/{BufferGeometryUtils,SkeletonUtils}.js` are
+   in place (imports fixed to the vendored three). loadKartModels(THREE, fetchImpl) now fetches+parses
+   the GLB once; same export signatures as today (main.js wiring must NOT change).
+2. REMOVE the car OBJ path entirely: delete vendor/assets/cars/, the OBJLoader/MTLLoader vendoring and
+   their test coverage. Fallback stays the lathe kart when the GLB fails to load.
+3. buildKartModel: deep-clone the parsed kart per racer with OWN materials; repaint
+   `Green paint`→spec.color, `Steel`→spec.trim; keep Dark iron/Rubber as parsed.
+4. Fit: measure the parsed bbox; scale so the longest horizontal extent ≈ 2.05 m (the old lathe
+   kart footprint) and the lowest point sits at y=0. Compute from the measured bbox, no hardcoded
+   scale factor.
+5. Driver: extract the driver assembly from buildLatheKart into a shared helper; seat it on the kart:
+   measure the Kart_seat bbox, put the driver pelvis on its top face, scale the driver so his total
+   height ≈ 1.15 m (matches the old kart silhouette so the camera probe keeps passing).
+6. Wheels: spin Kart_wheels_* around their local axle in updateKartModel using the kart's existing
+   wheelSpin; steer the front pair by steerVis. (The model has separate wheel nodes — the v2
+   'no named wheel nodes' shortcut comment goes away.)
+7. Keep turbo flames and everything else as in v2.
+
+Verification: pure helpers (repaint map decision, fit scale/offset math from synthetic boxes) unit-
+tested in tests/test_models.test.js (adapt existing); GLB parsing itself stays browser-only.
+`npm run check && npm test && node tools/smoke-render.js` green. Finish with DONE + files + the
+computed fit scale and final kart bbox after scaling (measured in a node script from the real file).

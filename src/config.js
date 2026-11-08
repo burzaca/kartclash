@@ -192,6 +192,7 @@ export const TRACKS = [
     // features as fractions of the lap (0..1) — deterministic, authored, not random
     itemNodes: [0.055, 0.42, 0.74],
     boostPads: [{ t: 0.185, w: 0.5 }, { t: 0.60, w: 0.42 }, { t: 0.905, w: 0.5 }],
+    ag: [{ t: 0.45, t2: 0.58, amp: 2.6 }],     // anti-gravity banked section (lap fractions)
     elev: { amp: 2.2, waves: 3, phase: 0.4 },   // gentle elevation, metres
     theme: { grass: 0x5f9a4a, road: 0x53565e, curb: 0xd8232a, wall: 0xe8e1d5, trees: 0x2f7a3a },
   },
@@ -205,6 +206,7 @@ export const TRACKS = [
     ],
     itemNodes: [0.08, 0.36, 0.68],
     boostPads: [{ t: 0.26, w: 0.5 }, { t: 0.55, w: 0.35 }, { t: 0.84, w: 0.5 }],
+    ag: [{ t: 0.62, t2: 0.75, amp: 2.8 }],
     elev: { amp: 3.0, waves: 4, phase: 1.7 },
     theme: { grass: 0x7fae5c, road: 0x6b5a4a, curb: 0x1c86d1, wall: 0xf0e6d2, trees: 0x3d8a5f },
   },

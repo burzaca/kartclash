@@ -337,3 +337,83 @@ correctness is checked by the PM in a real browser — make the DOM structure ob
 
 Fixed-step order, camera rig, split-screen viewport math, lighting/sky/shadow, and the final look and
 feel are mine. If your module needs something from them, code to this document, not to a guess.
+
+---
+
+# UPGRADE PASS v2 (this is the binding contract for the MK-feel work)
+
+## 7. Anti-gravity banked sections (WORKER A — `src/core/track.js`, `src/core/kart.js`)
+
+`config.js` TRACK defs now carry `ag: [{ t, t2, amp }]` (lap fractions, bank height in metres).
+Both tracks have one section each. Do not edit config.js — the data is already there.
+
+Track additions (exact field names):
+```js
+track.agRanges = [{ i0, i1, amp }]   // polyline index ranges, ramped: amp already blended in
+track.bankOffset(idx, side) -> number // extra y at that idx/side (0 outside ranges; 0 at side=0)
+```
+- `surfaceY(x, z)` MUST include the bank: for a point whose nearest idx is inside a range,
+  `y += amp * clamp(|side|/half, 0, 1)^2`. This single source of truth means karts, items, props and
+  the track mesh all get the banked half-pipe height for free via finite-difference slopes.
+- Ramp amp in/out over the first/last ~30 m of each range (cosine), so the surface is C0-continuous.
+- `sample()` gains `ag: true|false` (idx inside a range).
+- AG ranges must not overlap `startIdx` ±60 m, itemNodes, or pads (config positions already avoid it).
+
+Kart physics inside AG (this is the wall-ride):
+- While `s.ag`: the wall stop at `|side| > half - radius` is replaced by a **bank climb** — the kart
+  may go out to `half + 1.0`; surfaceY lifts it up the bank (no separate physics needed — the slope
+  does it), no off-road penalty, no wall bounce; mild centripetal help: while |side| > half*0.6 the
+  kart gets a gentle inward acceleration proportional to speed² (so riding high feels good, not scary).
+- Outside AG sections nothing changes. Drift/item/AI interactions unchanged.
+- `kart.fx.ag` = 1 while inside a range, decays to 0 over 0.5 s after leaving (renderer hint, add to
+  the fx hints in §0; kart.fx already exists).
+
+Verification (extend tests/test_track.test.js, test_kart.test.js):
+- bankOffset is 0 outside ranges, 0 at side=0, ≈amp at |side|=half mid-range; surfaceY continuous
+  across range edges (no step > 0.2 m between neighbouring points).
+- a kart steered hard into an AG wall climbs (y increases), keeps speed (no wall-hit), and returns
+  inward; the same steer outside a range still hits the wall and cuts speed (old behaviour intact).
+- `node --test tests/*.test.js` all green, and `node tools/simulate.js --all` must still PASS the
+  pacing gates (6 racers, 3 laps). AG is a speed-skill section, not a shortcut: average lap within
+  the sim's existing tolerance.
+
+## 8. Real kart bodies + turbo flames (WORKER B — `vendor/`, `src/render/kartModel.js`, `src/render/trackMesh.js`, AG look only)
+
+Assets (already downloaded, license CC0 — Quaternius via poly.pizza):
+`/home/hermes/Downloads/cars_extract/` has 7 cars as `.obj` + `.mtl` (1.1k tris each, materials = flat
+Kd colours: Black/ Grey / body colour / Headlights / TailLights / Windows). Copy chosen models into
+`vendor/assets/cars/` (pick the 6 most kart-like: NormalCar1, NormalCar2, SportsCar, SportsCar2, Taxi,
+Police — SUV only if you must). Add `vendor/assets/CREDITS.md`: "Car models by Quaternius (CC0), via
+poly.pizza Cars Bundle". Vendored loaders: `vendor/addons/ObjectLoader.js` + `MTLLoader.js` — take the
+r186 files from `https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/` and rewrite their
+`from 'three'` imports to `'../three.core.js'` style used by our vendored copy (check what
+three.module.js re-exports; import from `'../three.module.js'`).
+
+kartModel.js:
+- `buildKart(THREE, spec, idx)` keeps its current signature; body = the OBJ model for that racer index
+  (stable map idx→file), scaled to fit the existing collision radius (KART.radius) — measure, don't
+  guess: compute the bounding box after load, scale to ~1.8 m wide, seat the wheels on y=0.
+- Colour: after load, any material whose Kd is the saturated "body" colour is replaced by a
+  MeshStandardMaterial using `spec.color` (the player palette); other materials keep their colours but
+  switch to MeshStandardMaterial (same hex). Glossy paint: metalness 0.1, roughness 0.35 body;
+  wheels/windows rougher.
+- OBJ has no wheel nodes: skip wheel spin for model karts (`shortcut: model has no wheel nodes, add
+  when we switch to GLB with named parts`). Keep lean/tilt exactly as now.
+- Turbo flames (this replaces the spark-only look): while `kart.drift.on && tier >= 0` draw a cone
+  flame pair at the rear; colour per tier: tier0 #35a7ff (blue), tier1 #ff9a1f (orange),
+  tier2 #ff3bd4 (pink-purple); length = 0.4 + tier*0.5 m, flicker per frame; while boosting
+  (`kart.boost.time > 0`) same flames at full length. Additive blending, no texture files.
+- Keep the procedural karts as fallback: `buildKart` must work when models are missing (asset load
+  can fail at runtime) — same API, falls back to the old lathe kart.
+
+AG look in trackMesh.js (read `track.agRanges`, nothing else from core):
+- Road ribbon inside ranges uses the banked profile (it already calls `track.surfaceY`/halfWidth — if
+  your build samples cross-section offsets through surfaceY the bank comes for free).
+- AG section styling: road gets a translucent neon underglow (emissive tint, theme-independent cyan),
+  side barriers get a glowing rail, and an entry gantry sign "AG" chevron at range start. Deterministic.
+
+Hard rules for both workers: no new npm dependencies, no network access at runtime except same-origin
+`fetch` of vendored files, keep `node --test` green (render tests use the DOM stub — OBJ loading must
+not run inside node tests; guard with a lazy load API: `loadKartModels(THREE, fetchImpl)` called by
+main.js, which the PM wires; you just export it).
+

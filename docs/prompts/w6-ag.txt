@@ -1,0 +1,24 @@
+You are WORKER A on the Kart Clash v2 pass. Repo: ~/projects/kartclash (you are in it).
+
+FIRST read docs/INTERFACES.md fully — the new section "UPGRADE PASS v2", §7, is your binding spec.
+Also read src/core/track.js and src/core/kart.js completely before editing anything.
+
+Your job: anti-gravity banked sections.
+1. src/core/track.js — build agRanges from def.ag (config.js already has the data: two tracks, one
+   section each as {t,t2,amp} lap fractions), expose track.agRanges + track.bankOffset(idx, side),
+   and make surfaceY(x,z) include the banked half-pipe (amp * clamp(|side|/half,0,1)^2, cosine-ramped
+   over ~30 m at each range edge). sample() gains an `ag` boolean. Existing behaviour must not change
+   outside AG ranges.
+2. src/core/kart.js — inside AG: wall stop replaced by bank climb out to half+1.0, no off-road penalty,
+   no wall bounce, gentle speed^2-proportional inward assist when |side| > half*0.6. kart.fx.ag = 1
+   inside, decays over 0.5 s after leaving. Everything outside AG untouched.
+3. Extend tests/test_track.test.js and tests/test_kart.test.js with the assertions listed in §7.
+
+Hard rules: touch ONLY src/core/track.js, src/core/kart.js, tests/test_track.test.js,
+tests/test_kart.test.js. Do not edit src/config.js, src/core/ai.js, src/core/race.js, render/, ui/.
+No new deps. Pure ESM, no DOM/THREE in core.
+
+Verification loop until green (run them, fix, re-run):
+  node --test tests/*.test.js
+  node tools/simulate.js --all      (must still PASS the pacing gates — AG is skill, not shortcut)
+Finish by printing DONE plus the list of files you changed and the final sim numbers.

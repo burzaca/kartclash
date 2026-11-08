@@ -1,0 +1,36 @@
+You are WORKER B on the Kart Clash v2 pass. Repo: ~/projects/kartclash (you are in it).
+
+FIRST read docs/INTERFACES.md fully — the new section "UPGRADE PASS v2", §8, is your binding spec.
+Also read src/render/kartModel.js and src/render/trackMesh.js completely before editing anything.
+
+Already done for you (do not redo): vendor/assets/cars/*.obj+.mtl (6 CC0 Quaternius cars),
+vendor/assets/CREDITS.md, vendor/addons/OBJLoader.js and MTLLoader.js (r186, imports rewritten to
+'../three.module.js', verified importable in node).
+
+Your job:
+1. src/render/kartModel.js — export loadKartModels(THREE, fetchImpl) that fetches+parses the 6 car
+   models once and caches them; buildKart keeps its existing signature and, when models are loaded,
+   uses the car for that racer index (stable map), measured-scaled to the existing kart footprint
+   (bounding box -> ~1.8 m wide, wheels on y=0), body-coloured per spec.color as MeshStandardMaterial
+   per §8, and falls back to the current procedural lathe kart when models are absent. Add the turbo
+   flames per §8 (drift tier colours, boost = full length, additive, no textures). shortcut comment
+   for missing wheel nodes.
+2. src/render/trackMesh.js — AG sections: the ribbon must follow the banked profile by sampling
+   y through track.surfaceY (contract §7 defines agRanges + bankOffset — another worker is adding
+   them to core right now; code against the contract, and make your code tolerate agRanges being
+   absent/empty so nothing breaks before the core lands), neon underglow + glowing rails + entry
+   gantry per §8. Deterministic.
+3. If you need to extend tests (tests/ has a DOM stub; model loading must NOT run in node tests —
+   only test the pure helpers you factor out, e.g. the colour-remap decision or the bank cross-section
+   math).
+
+Hard rules: touch ONLY src/render/kartModel.js, src/render/trackMesh.js, and (if needed) new test
+files tests/test_models*.test.js. Do not touch src/core/*, src/main.js, index.html, src/ui/*, config.
+No new npm dependencies; runtime fetch only for same-origin vendor files.
+
+Verification loop until green:
+  npm run check
+  node --test tests/*.test.js
+Finish by printing DONE, the files you changed, and the max bounding-box size of each loaded model
+after scaling (from a short node script that parses them with the vendored loaders — that proves
+your scale math against real data, not guesses).

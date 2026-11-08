@@ -34,8 +34,10 @@ const DEBUG_HUD = qs.get('debug') === '1';   // raw phase/clock readout for the 
 function boot() {
   const canvas = document.getElementById('game');
   const uiRoot = document.getElementById('ui');
-  // preload real kart bodies; buildKartModel falls back to procedural until/if this fails
-  loadKartModels(THREE).catch(() => {});
+  // preload real kart bodies; buildKartModel falls back to procedural until/if this fails.
+  // If a race starts before the fetch finishes (slow CDN), swap the fallback karts in-place
+  // once the models are ready, so the look never stays wrong.
+  loadKartModels(THREE).then(() => swapToModelKarts()).catch(() => {});
   const stage = createStage(THREE, canvas, { keepBacking: allAI || !!shotName });
   if (NO_SHADOW) stage.setShadows(false);
   const { renderer, scene } = stage;
@@ -145,6 +147,19 @@ function boot() {
     menu.hide();
     race.start();
     hud.hideResults();
+  }
+
+  // Replace any procedural fallback kart groups with the real GLB karts, keeping game state intact.
+  function swapToModelKarts() {
+    if (!karts) return;
+    for (let i = 0; i < models.length && i < karts.length; i++) {
+      if (models[i] && models[i].userData.parts && models[i].userData.parts.model === 'pixor') continue;
+      if (!models[i]) continue;
+      scene.remove(models[i]);
+      const g = buildKartModel(THREE, karts[i].spec, karts[i].id);
+      scene.add(g); models[i] = g;
+      setHeldItem(THREE, g, karts[i].item, karts[i].count);
+    }
   }
   function buildStandingsView() {
     return standings(race).map((r) => ({

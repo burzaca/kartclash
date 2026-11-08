@@ -288,7 +288,11 @@ const STACKABLE_BASES = new Set([ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL
     if (!k || k.finished) return 0;
     for (const b of boxes) {
       if (!b.active) continue;
-      if (dist2(b.x, b.z, k.pos.x, k.pos.z) > ITEMS.boxRadius) continue;
+      // dist2 is SQUARED distance; boxRadius is linear. Comparing them directly capped the
+      // real pickup radius at sqrt(1.9)=1.38m while the crate is 1.5m wide — edge passes of a
+      // box silently collected nothing (the player's "I held nothing and still couldn't pick
+      // anything up" report). Compare like with like.
+      if (dist2(b.x, b.z, k.pos.x, k.pos.z) > ITEMS.boxRadius * ITEMS.boxRadius) continue;
 
       const held = k.item || ITEM.NONE;
       const heldBase = baseOf(held);

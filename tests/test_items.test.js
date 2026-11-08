@@ -471,3 +471,13 @@ test('one RNG stream gives a variety of items at the same running position', () 
   }
   assert.ok(seen.size >= 3, `only ${seen.size} distinct items over 40 boxes — the roll is stuck`);
 });
+
+test('regression 2026-11-08: a near-centered pass at 1.7 m must collect (was a squared/linear unit bug)', () => {
+  const track = makeLoopTrack();
+  const items = createItemSystem(track, mulberry32(11));
+  const k = place(track, makeTestKart(0), 30);
+  const ctx = { karts: [k] };
+  const b = items.boxes[2];
+  k.pos.x = b.x + 1.7; k.pos.z = b.z;           // visually inside a 1.5 m crate's neighborhood
+  assert.notEqual(items.collect(k, ctx), 0, '1.7 m from an empty-handed kart must be inside the 1.9 m pickup radius');
+});

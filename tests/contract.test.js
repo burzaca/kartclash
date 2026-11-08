@@ -1,5 +1,6 @@
 // tests/contract.test.js — the PM's integration gate. Validates every module against
 // docs/INTERFACES.md exactly as written. Worker-authored tests check behaviour; this checks contract.
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -235,4 +236,11 @@ test('the vendored three.js build is present, complete, and loads with the APIs 
   for (const api of ['PerspectiveCamera', 'WebGLRenderer', 'Box3', 'Vector3', 'Scene', 'LatheGeometry']) {
     assert.equal(typeof THREE[api], 'function', `vendored three.js is missing ${api}`);
   }
+});
+
+// Wiring guard for a browser-only handler (main.js): pause keys must be inert at the title —
+// an unguarded toggle silently set paused=true while the title showed, freezing the next race.
+test('pause keys are guarded by started+phase in the key handler', () => {
+  const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.match(src, /if \(started && race\.phase !== 'finished' && GLOBAL_KEYS\.pause\.includes\(e\.code\)\)/);
 });

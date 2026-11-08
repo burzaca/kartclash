@@ -365,7 +365,7 @@ function boot() {
   window.addEventListener('keydown', (e) => {
     // after the flag, Esc/Enter goes back to the title screen (it used to do nothing at all)
     if (started && race.phase === 'finished' && (e.code === 'Escape' || e.code === 'Enter')) { toTitle(); return; }
-    if (GLOBAL_KEYS.pause.includes(e.code)) { paused = !paused; if (paused) menu.showPause(menuInfo()); else menu.hidePause(); return; }
+    if (started && race.phase !== 'finished' && GLOBAL_KEYS.pause.includes(e.code)) { paused = !paused; if (paused) menu.showPause(menuInfo()); else menu.hidePause(); return; }
     if (GLOBAL_KEYS.restart.includes(e.code)) { if (started) { race.start(); hud.hideResults(); } return; }
     if (started && race.phase === 'finished' && e.code === 'Enter') { race.start(); hud.hideResults(); return; }
     if (!started && e.code === 'Enter') { startRace(); return; }

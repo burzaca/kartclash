@@ -1,29 +1,38 @@
-// tests/test_models.test.js — pure helpers of the v2 kart bodies + AG track look (no asset loading).
+// tests/test_models.test.js — pure helpers of the v3 GLB kart + AG track look (no asset loading).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three.module.js';
-import { pickBodyMaterials, flameLook, FLAME_COLORS, buildKartModel } from '../src/render/kartModel.js';
+import { KART_LEN, repaintFor, fitTransform, seatTransform, flameLook, FLAME_COLORS, buildKartModel } from '../src/render/kartModel.js';
 import { agWeights, buildTrackScene } from '../src/render/trackMesh.js';
 import { buildTrack } from '../src/core/track.js';
 import { TRACKS, PLAYERS } from '../src/config.js';
 
-// Kd values copied from vendor/assets/cars/*.mtl
-const SHARED = { Black: [0.011, 0.011, 0.011], Grey: [0.161, 0.161, 0.161], Windows: [0.028, 0.028, 0.028],
-  Headlights: [0.639, 0.301, 0.102], TailLights: [0.639, 0.074, 0.059] };
+test('repaint by material name: paint -> colour, steel -> trim, iron/rubber keep parsed', () => {
+  const spec = PLAYERS[0];
+  assert.equal(repaintFor('Green paint', spec), spec.color);
+  assert.equal(repaintFor('Steel', spec), spec.trim);
+  assert.equal(repaintFor('Dark iron', spec), null);
+  assert.equal(repaintFor('Rubber', spec), null);
+});
 
-test('paint pick: saturated body colour, white cars, two-tone, light-named paint', () => {
-  assert.deepEqual(Object.keys(pickBodyMaterials({ ...SHARED, Blue: [0.278, 0.432, 0.64] })), ['Blue']);
-  assert.deepEqual(Object.keys(pickBodyMaterials({ ...SHARED, Yellow: [0.64, 0.465, 0.045] })), ['Yellow']);
-  // police: white body, BlueLights/WhiteLights are lamps, not paint
-  assert.deepEqual(Object.keys(pickBodyMaterials({ ...SHARED, White: [0.549, 0.549, 0.549],
-    BlueLights: [0.042, 0.158, 0.64], WhiteLights: [0.64, 0.64, 0.64] })), ['White']);
-  // LightBlue is paint (name contains "Light" but does not end in "lights"); the white trim is not
-  assert.deepEqual(Object.keys(pickBodyMaterials({ ...SHARED, LightBlue: [0.459, 0.548, 0.64], 'Material.007': [0.64, 0.64, 0.64] })), ['LightBlue']);
-  // two-tone orange: both repainted, the dark panel keeps its relative shade
-  const two = pickBodyMaterials({ ...SHARED, Orange: [0.639, 0.266, 0.086], DarkOrange: [0.559, 0.233, 0.076] });
-  assert.equal(two.Orange, 1);
-  assert.ok(two.DarkOrange > 0.8 && two.DarkOrange < 0.95);
-  assert.deepEqual(pickBodyMaterials(SHARED), {});
+test('fit: longest horizontal side -> KART_LEN, centred on x/z, lowest point on y=0', () => {
+  // pixor.glb's measured box: 1.302 x 0.662 x 1.85, z off-centre
+  const f = fitTransform({ x: -0.651, y: 0, z: -0.85 }, { x: 0.651, y: 0.662, z: 1 });
+  assert.ok(Math.abs(f.scale - KART_LEN / 1.85) < 1e-12);
+  assert.ok(Math.abs(f.offset.z + 0.075 * f.scale) < 1e-12 && Math.abs(f.offset.x) < 1e-12);
+  // wider than long, floating at y=2: x drives the scale, lifted to the ground
+  const g = fitTransform({ x: 0, y: 2, z: -1 }, { x: 4, y: 3, z: 1 }, 2);
+  assert.equal(g.scale, 0.5);
+  assert.deepEqual([g.offset.x, g.offset.y, g.offset.z + 0], [-1, -1, 0]);   // +0 folds -0
+});
+
+test('seat: driver scaled to height, pelvis lands exactly on the seat point', () => {
+  const t = seatTransform(-1, 3, { x: 0.2, y: 0.5, z: 1 }, { x: 0, y: 0.7, z: -0.3 }, 1.2);
+  assert.ok(Math.abs(t.scale - 0.3) < 1e-12);
+  for (const k of ['x', 'y', 'z']) {
+    const pel = { x: 0.2, y: 0.5, z: 1 }[k] * t.scale + t.position[k];
+    assert.ok(Math.abs(pel - { x: 0, y: 0.7, z: -0.3 }[k]) < 1e-12, k);
+  }
 });
 
 test('flame look: tier colour + length while drifting, full length while boosting, off otherwise', () => {
@@ -39,7 +48,7 @@ test('flame look: tier colour + length while drifting, full length while boostin
   assert.deepEqual(FLAME_COLORS, [0x35a7ff, 0xff9a1f, 0xff3bd4]);
 });
 
-test('lathe fallback still builds with flames when no car models are loaded', () => {
+test('lathe fallback still builds with flames when the kart GLB is not loaded', () => {
   const g = buildKartModel(THREE, PLAYERS[0], 0);
   assert.equal(g.userData.parts.flame.length, 2);
   assert.equal(g.userData.parts.wheels.length, 4);

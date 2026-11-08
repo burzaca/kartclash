@@ -30,6 +30,10 @@ jobs:
         run: |
           npm run probe:camera
           npm run probe:camera -- --cam=close
+      - name: Camera framing with the real GLB kart model
+        run: |
+          node tools/probe-glb.mjs
+          node tools/probe-glb.mjs --cam=close
           npm run probe:camera -- --cam=far
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3

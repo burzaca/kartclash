@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-08.1',
+  build: '2026-11-08.2',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,

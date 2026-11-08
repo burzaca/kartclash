@@ -5,24 +5,123 @@
 // No flatShading anywhere; high segment counts; all parts cast/receive shadow.
 // kart within ~2.2 m radius, ~1.6 m tall.
 
-// ===================================================================== real car bodies (v2 §8)
-// CC0 Quaternius cars, vendored. Stable racer index -> file map.
-export const CAR_FILES = ['car', 'sportscar', 'taxi', 'policecar', 'carunqqkultru', 'sportscaroyqkvx9xnh'];
-const CAR_W = 1.8, CAR_L = 3.6;   // ~1.8 m wide unless that makes it longer than 3.6 m (smoke-render's chase-cam silhouette cap)
-let carCache = null, carLoading = null;
+// ===================================================================== GLB go-kart (v3 §9)
+// One CC0 kart (pixor.art), vendored; every racer gets its own repainted clone.
+const KART_GLB = '../../vendor/assets/karts/pixor.glb';
+// Longest horizontal extent. §9 asked 2.05 (lathe length), but pixor is narrower (w/l 0.70 vs the
+// lathe's 0.91): at 2.05 the chase cam read it 18-25% vs the lathe's 21-29%. 2.35 measured back to parity.
+export const KART_LEN = 2.35;
+export const DRIVER_H = 1.15;   // driver's total height (matches the old kart silhouette)
+let kartCache = null, kartLoading = null;
 
-// Which MTL materials are the paint: drop the shared trim names, keep the most saturated
-// survivors (white police/sports cars have only one survivor). Value = brightness relative to
-// the brightest paint, so a DarkOrange panel stays a darker shade of the player colour.
-const NOT_PAINT = /^(black|grey|gray|windows)$|lights$/i;
-export function pickBodyMaterials(kd) {
-  const sat = ([r, g, b]) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; return mx === mn ? 0 : (mx - mn) / (1 - Math.abs(2 * l - 1)); };
-  const cand = Object.keys(kd).filter((n) => !NOT_PAINT.test(n));
-  if (!cand.length) return {};
-  const top = Math.max(...cand.map((n) => sat(kd[n])));
-  const body = cand.filter((n) => sat(kd[n]) >= top - 0.05);
-  const vmax = Math.max(...body.map((n) => Math.max(...kd[n])));
-  return Object.fromEntries(body.map((n) => [n, Math.max(...kd[n]) / vmax]));
+// Parsed material name -> spec colour, or null to keep the parsed colour (Dark iron, Rubber).
+export function repaintFor(name, spec) {
+  return name === 'Green paint' ? spec.color : name === 'Steel' ? spec.trim : null;
+}
+
+// Measured box -> uniform scale (longest horizontal side = len) and the offset (scaled frame)
+// that centres it on x/z and puts its lowest point on y=0.
+export function fitTransform(min, max, len = KART_LEN) {
+  const s = len / Math.max(max.x - min.x, max.z - min.z);
+  return { scale: s, offset: { x: -(min.x + max.x) / 2 * s, y: -min.y * s, z: -(min.z + max.z) / 2 * s } };
+}
+
+// Driver box height -> scale to h; position that puts his pelvis point (driver frame) on the seat point.
+export function seatTransform(minY, maxY, pelvis, seat, h = DRIVER_H) {
+  const s = h / (maxY - minY);
+  return { scale: s, position: { x: seat.x - pelvis.x * s, y: seat.y - pelvis.y * s, z: seat.z - pelvis.z * s } };
+}
+
+// Fetch + parse the GLB once (browser: same-origin vendored file). main.js kicks this off before
+// building karts; buildKartModel falls back to the lathe kart while it is unresolved or failed.
+export function loadKartModels(THREE, fetchImpl = globalThis.fetch) {
+  if (kartCache) return Promise.resolve(kartCache);
+  if (kartLoading) return kartLoading;
+  kartLoading = (async () => {
+    const { GLTFLoader } = await import('../../vendor/addons/GLTFLoader.js');
+    const r = await fetchImpl(new URL(KART_GLB, import.meta.url).href);
+    if (!r.ok) throw new Error(`kart asset: HTTP ${r.status}`);
+    const gltf = await new GLTFLoader().parseAsync(await r.arrayBuffer(), '');
+    return (kartCache = gltf.scene);
+  })().catch((e) => { kartLoading = null; throw e; });
+  return kartLoading;
+}
+
+// Each Kart_wheels_* node is one mesh holding BOTH wheels of an axle: split it per side into a
+// steer pivot (at that wheel's centre) + spinner, so the pair can steer and roll about the axle.
+function splitWheels(THREE, kart) {
+  const wheels = [], spinners = [];
+  for (const name of ['Kart_wheels_front', 'Kart_wheels_back']) {
+    const grp = kart.getObjectByName(name);
+    if (!grp) continue;
+    const meshes = [];
+    grp.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    grp.updateMatrixWorld(true);
+    const toGrp = new THREE.Matrix4().copy(grp.matrixWorld).invert();
+    for (const side of [-1, 1]) {
+      const halves = meshes.map((m) => {
+        const g = m.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(toGrp, m.matrixWorld));
+        const idx = g.index.array, x = g.attributes.position, keep = [];   // shortcut: assumes indexed geometry (pixor.glb is), add a toNonIndexed path for other kart files
+        for (let t = 0; t < idx.length; t += 3) if ((x.getX(idx[t]) + x.getX(idx[t + 1]) + x.getX(idx[t + 2])) * side > 0) keep.push(idx[t], idx[t + 1], idx[t + 2]);
+        const half = new THREE.Mesh(g.setIndex(keep).toNonIndexed(), m.material);
+        half.geometry.computeBoundingBox();
+        half.castShadow = true; half.receiveShadow = true;
+        return half;
+      });
+      const box = new THREE.Box3();
+      for (const h of halves) box.union(h.geometry.boundingBox);
+      const c = box.getCenter(new THREE.Vector3());
+      const pivot = new THREE.Group(), spinner = new THREE.Group();
+      pivot.position.copy(c);
+      pivot.userData.front = name === 'Kart_wheels_front';
+      pivot.userData.yaw = 0;
+      for (const h of halves) { h.geometry.translate(-c.x, -c.y, -c.z); spinner.add(h); }
+      pivot.add(spinner); grp.add(pivot);
+      wheels.push(pivot); spinners.push(spinner);
+    }
+    for (const m of meshes) m.removeFromParent();
+  }
+  return { wheels, spinners };
+}
+
+function buildGlbKart(THREE, spec, scene) {
+  const group = new THREE.Group();
+  group.userData.three = THREE;
+  const rig = new THREE.Group(), kart = scene.clone(true), paint = [];
+  kart.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone();   // own materials per racer
+    const c = repaintFor(o.material.name, spec);
+    if (c != null) o.material.color.set(c);
+    if (o.material.name === 'Green paint') paint.push(o.material);
+    o.castShadow = true; o.receiveShadow = true;
+  });
+  const { wheels, spinners } = splitWheels(THREE, kart);
+  rig.add(kart); group.add(rig);
+
+  kart.updateMatrixWorld(true);
+  const kb = new THREE.Box3().setFromObject(kart), fit = fitTransform(kb.min, kb.max);
+  kart.scale.setScalar(fit.scale);
+  kart.position.set(fit.offset.x, fit.offset.y, fit.offset.z);
+  group.updateMatrixWorld(true);
+
+  // driver: hips on the seat's top face, scaled to DRIVER_H (measured, not guessed)
+  const { driver, helmet, visor, legs } = buildDriver(THREE, spec);
+  driver.updateMatrixWorld(true);
+  const db = new THREE.Box3().setFromObject(driver), lb = new THREE.Box3();
+  for (const l of legs) lb.union(new THREE.Box3().setFromObject(l));
+  const seatObj = kart.getObjectByName('Kart_seat');
+  const sb = seatObj ? new THREE.Box3().setFromObject(seatObj) : kb.clone().applyMatrix4(kart.matrixWorld);
+  const lc = lb.getCenter(new THREE.Vector3()), sc = sb.getCenter(new THREE.Vector3());
+  const st = seatTransform(db.min.y, db.max.y, { x: lc.x, y: lb.max.y, z: lc.z }, { x: sc.x, y: sb.max.y, z: sc.z });
+  driver.scale.setScalar(st.scale);
+  driver.position.set(st.position.x, st.position.y, st.position.z);
+  rig.add(driver);
+
+  group.userData.parts = { body: kart, chassis: null, wheels, wheelSpinners: spinners, spinAxis: 'x',
+    driver, helmet, visor, exhaust: [], flame: [], shield: null, spark: null, shadowBlob: null,
+    rig, paint, model: 'pixor', fit: fit.scale };
+  return group;
 }
 
 // Turbo flame look: drift tier colours, length 0.4 + tier*0.5 m, full length while boosting.
@@ -32,77 +131,6 @@ export function flameLook(kart, boostTier = 1) {
   if (kart.boost.time > 0) return { on: true, len: 1.4, tier: t >= 0 ? t : boostTier };
   if (t >= 0) return { on: true, len: 0.4 + t * 0.5, tier: t };
   return { on: false, len: 0, tier: -1 };
-}
-
-// Orient (front wheels -> +Z, snapped to 90°), centre, seat lowest point on y=0, scale to footprint.
-function fitCar(THREE, obj) {
-  const c = (o) => new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
-  let front = null, back = null;
-  obj.updateMatrixWorld(true);
-  for (const m of obj.children) { if (/FrontLeft/i.test(m.name)) front = c(m); else if (/BackWheels/i.test(m.name)) back = c(m); }
-  const a = front && back ? Math.atan2(front.x - back.x, front.z - back.z) : 0;   // no wheel names: assume +Z
-  obj.rotation.y = -Math.round(a / (Math.PI / 2)) * (Math.PI / 2);
-  const outer = new THREE.Group();
-  outer.add(obj);
-  outer.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(outer), size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
-  obj.position.set(-mid.x, -box.min.y, -mid.z);
-  outer.scale.setScalar(Math.min(CAR_W / size.x, CAR_L / size.z));
-  return outer;
-}
-
-// Fetch + parse the 6 cars once (browser: same-origin vendored files). main.js awaits this before
-// building karts; buildKartModel falls back to the lathe kart while it is unresolved or failed.
-export function loadKartModels(THREE, fetchImpl = globalThis.fetch) {
-  if (carCache) return Promise.resolve(carCache);
-  if (carLoading) return carLoading;
-  carLoading = (async () => {
-    const [{ OBJLoader }, { MTLLoader }] = await Promise.all([
-      import('../../vendor/addons/OBJLoader.js'), import('../../vendor/addons/MTLLoader.js')]);
-    const text = async (f) => {
-      const r = await fetchImpl(new URL(`../../vendor/assets/cars/${f}`, import.meta.url).href);
-      if (!r.ok) throw new Error(`car asset ${f}: HTTP ${r.status}`);
-      return r.text();
-    };
-    const out = [];
-    for (const f of CAR_FILES) {
-      const [mtl, obj] = await Promise.all([text(f + '.mtl'), text(f + '.obj')]);
-      const kd = {};
-      for (const [name, m] of Object.entries(new MTLLoader().parse(mtl, '').materialsInfo)) if (m.kd) kd[name] = m.kd;
-      out.push({ file: f, kd, paint: pickBodyMaterials(kd), object: fitCar(THREE, new OBJLoader().parse(obj)) });
-    }
-    return (carCache = out);
-  })().catch((e) => { carLoading = null; throw e; });
-  return carLoading;
-}
-
-function buildCarKart(THREE, spec, car) {
-  const group = new THREE.Group();
-  group.userData.three = THREE;
-  const rig = car.object.clone(true);
-  const mats = new Map(), paint = [];
-  const matFor = (name) => {
-    if (mats.has(name)) return mats.get(name);
-    const kd = car.kd[name] || [0.5, 0.5, 0.5], shade = car.paint[name];
-    const m = shade !== undefined
-      ? new THREE.MeshStandardMaterial({ color: new THREE.Color(spec.color).multiplyScalar(shade), metalness: 0.1, roughness: 0.35 })
-      : new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(kd[0], kd[1], kd[2], THREE.SRGBColorSpace), metalness: 0.05, roughness: /windows/i.test(name) ? 0.5 : 0.7 });
-    if (/lights$/i.test(name)) { m.emissive.copy(m.color); m.emissiveIntensity = 0.6; }
-    if (shade !== undefined) paint.push(m);
-    mats.set(name, m);
-    return m;
-  };
-  rig.traverse((o) => {
-    if (!o.isMesh) return;
-    o.material = Array.isArray(o.material) ? o.material.map((m) => matFor(m.name)) : matFor(o.material.name);
-    o.castShadow = true; o.receiveShadow = true;
-  });
-  group.add(rig);
-  // shortcut: model has no wheel nodes with pivots (OBJ wheels are baked in model space), so no
-  // wheel spin/steer for model karts; add when we switch to GLB with named parts.
-  group.userData.parts = { body: rig, chassis: null, wheels: [], driver: null, helmet: null, visor: null,
-    exhaust: [], flame: [], shield: null, spark: null, shadowBlob: null, rig, paint, model: car.file };
-  return group;
 }
 
 // Effect parts (shield, turbo flames, spark, airborne shadow) sized from the measured body box.
@@ -144,21 +172,134 @@ function addEffects(THREE, group) {
   return group;
 }
 
-// idx = racer index (stable car map). Falls back to the procedural lathe kart without models.
-export function buildKartModel(THREE, spec, idx = spec.id ?? 0) {
-  const car = carCache && carCache[((idx % carCache.length) + carCache.length) % carCache.length];
-  return addEffects(THREE, car ? buildCarKart(THREE, spec, car) : buildLatheKart(THREE, spec));
+// idx kept for API compatibility (one model for all racers). Lathe kart until/unless the GLB loads.
+export function buildKartModel(THREE, spec, idx) {
+  return addEffects(THREE, kartCache ? buildGlbKart(THREE, spec, kartCache) : buildLatheKart(THREE, spec));
+}
+
+// Driver (torso, arms, legs, belts, helmet, visor) — shared by the lathe and GLB karts.
+// Returns the legs too: the GLB kart seats him by his hips (top of the legs).
+function buildDriver(THREE, spec) {
+  const { trim, skin, helmet } = spec;
+  const matTrim = new THREE.MeshStandardMaterial({ color: trim, roughness: 0.5, metalness: 0.5 });
+  const matSkin = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7, metalness: 0.2 });
+  const matHelmet = new THREE.MeshStandardMaterial({ color: helmet, roughness: 0.3, metalness: 0.1 });
+  const legs = [];
+  const driverGroup = new THREE.Group();
+
+  // Torso lathe profile
+  const torsoPoints = [];
+  for (let i = 0; i <= 16; i++) {
+    const t = i / 16;
+    torsoPoints.push(new THREE.Vector2(0.62 * (1 - t * 0.30), 1.25 * (1 - t * 0.40)));
+  }
+  const torsoGeo = new THREE.LatheGeometry(torsoPoints, 24);
+  const torsoMesh = new THREE.Mesh(torsoGeo, matSkin);
+  torsoMesh.castShadow = true;
+  torsoMesh.receiveShadow = true;
+  torsoMesh.position.set(0, 0.65, 0.75);
+  driverGroup.add(torsoMesh);
+
+  // Arms at sides
+  for (let side of [-1, 1]) {
+    const armGroup = new THREE.Group();
+    armGroup.position.set(side * 0.36, 0.42, 0.85);
+
+    const uaGeo = new THREE.BoxGeometry(0.11, 0.46, 0.11);
+    const uaMesh = new THREE.Mesh(uaGeo, matSkin);
+    uaMesh.castShadow = true;
+    uaMesh.receiveShadow = true;
+    armGroup.add(uaMesh);
+
+    const elbowGeo = new THREE.SphereGeometry(0.13, 16, 16);
+    const elbowMesh = new THREE.Mesh(elbowGeo, matSkin);
+    elbowMesh.position.set(0, -0.46, 0);
+    elbowMesh.castShadow = true;
+    elbowMesh.receiveShadow = true;
+    armGroup.add(elbowMesh);
+
+    const laGeo = new THREE.BoxGeometry(0.09, 0.42, 0.09);
+    const laMesh = new THREE.Mesh(laGeo, matSkin);
+    laMesh.position.set(0, -0.42, 0);
+    laMesh.castShadow = true;
+    laMesh.receiveShadow = true;
+    armGroup.add(laMesh);
+
+    driverGroup.add(armGroup);
+  }
+
+  // Legs onto footwell
+  for (let side of [-1, 1]) {
+    const legGroup = new THREE.Group();
+    legGroup.position.set(side * 0.26, 0.22, 1.05);
+
+    const thighGeo = new THREE.BoxGeometry(0.13, 0.56, 0.13);
+    const thighMesh = new THREE.Mesh(thighGeo, matSkin);
+    thighMesh.castShadow = true;
+    thighMesh.receiveShadow = true;
+    legGroup.add(thighMesh);
+
+    const kneeGeo = new THREE.SphereGeometry(0.15, 16, 16);
+    const kneeMesh = new THREE.Mesh(kneeGeo, matSkin);
+    kneeMesh.position.set(0, -0.56, 0);
+    kneeMesh.castShadow = true;
+    kneeMesh.receiveShadow = true;
+    legGroup.add(kneeMesh);
+
+    const shinGeo = new THREE.BoxGeometry(0.11, 0.52, 0.11);
+    const shinMesh = new THREE.Mesh(shinGeo, matSkin);
+    shinMesh.position.set(0, -0.52, 0);
+    shinMesh.castShadow = true;
+    shinMesh.receiveShadow = true;
+    legGroup.add(shinMesh);
+
+    driverGroup.add(legGroup);
+    legs.push(legGroup);
+  }
+
+  // Seat belt straps (trim-colour boxes over torso)
+  for (let side of [-1, 1]) {
+    const beltGeo = new THREE.BoxGeometry(0.06, 0.9, 0.05);
+    const beltMesh = new THREE.Mesh(beltGeo, matTrim);
+    beltMesh.castShadow = true;
+    beltMesh.receiveShadow = true;
+    beltMesh.position.set(side * 0.14, 0.65, 0.75);
+    driverGroup.add(beltMesh);
+  }
+
+  // Helmet: curved lathe profile
+  const helmetPoints = [];
+  for (let i = 0; i <= 20; i++) {
+    const t = i / 20;
+    helmetPoints.push(new THREE.Vector2(0.96 * (1 - t * 0.18), 1.05 + t * 0.25));
+  }
+  const helmetGeo = new THREE.LatheGeometry(helmetPoints, 24);
+  const helmetMesh = new THREE.Mesh(helmetGeo, matHelmet);
+  helmetMesh.castShadow = true;
+  helmetMesh.receiveShadow = true;
+  helmetMesh.position.set(0, 0.72, 0.95);
+  driverGroup.add(helmetMesh);
+
+  // Visor stripe: flat plane across face (trim colour)
+  const visorGeo = new THREE.PlaneGeometry(1.10, 0.09);
+  const visorMat = new THREE.MeshStandardMaterial({ color: trim, roughness: 0.4, metalness: 0.3 });
+  const visorMesh = new THREE.Mesh(visorGeo, visorMat);
+  visorMesh.castShadow = true;
+  visorMesh.receiveShadow = true;
+  visorMesh.position.set(0, 0.67, 1.02);
+  visorMesh.rotation.x = -0.18;
+  driverGroup.add(visorMesh);
+
+  return { driver: driverGroup, helmet: helmetMesh, visor: visorMesh, legs };
 }
 
 function buildLatheKart(THREE, spec) {
   const group = new THREE.Group();
   group.userData.three = THREE;   // updateKartModel has no THREE parameter (see INTERFACES §4)
 
-  const { color, trim, skin, helmet } = spec;
+  const { color, trim } = spec;
   const matBody = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.4 });
   const matTrim = new THREE.MeshStandardMaterial({ color: trim, roughness: 0.5, metalness: 0.5 });
-  const matSkin = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7, metalness: 0.2 });
-  const matHelmet = new THREE.MeshStandardMaterial({ color: helmet, roughness: 0.3, metalness: 0.1 });
   const matDark = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.8 });
   const matHub = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.9 });
 
@@ -254,111 +395,9 @@ function buildLatheKart(THREE, spec) {
     group.userData.parts.wheels.push(pivot);
   }
 
-  // ----- Driver group: lathe torso + arms + legs + helmet + visor + wheel -----
-  const driverGroup = new THREE.Group();
-
-  // Torso lathe profile
-  const torsoPoints = [];
-  for (let i = 0; i <= 16; i++) {
-    const t = i / 16;
-    torsoPoints.push(new THREE.Vector2(0.62 * (1 - t * 0.30), 1.25 * (1 - t * 0.40)));
-  }
-  const torsoGeo = new THREE.LatheGeometry(torsoPoints, 24);
-  const torsoMesh = new THREE.Mesh(torsoGeo, matSkin);
-  torsoMesh.castShadow = true;
-  torsoMesh.receiveShadow = true;
-  torsoMesh.position.set(0, 0.65, 0.75);
-  driverGroup.add(torsoMesh);
-
-  // Arms at sides
-  for (let side of [-1, 1]) {
-    const armGroup = new THREE.Group();
-    armGroup.position.set(side * 0.36, 0.42, 0.85);
-
-    const uaGeo = new THREE.BoxGeometry(0.11, 0.46, 0.11);
-    const uaMesh = new THREE.Mesh(uaGeo, matSkin);
-    uaMesh.castShadow = true;
-    uaMesh.receiveShadow = true;
-    armGroup.add(uaMesh);
-
-    const elbowGeo = new THREE.SphereGeometry(0.13, 16, 16);
-    const elbowMesh = new THREE.Mesh(elbowGeo, matSkin);
-    elbowMesh.position.set(0, -0.46, 0);
-    elbowMesh.castShadow = true;
-    elbowMesh.receiveShadow = true;
-    armGroup.add(elbowMesh);
-
-    const laGeo = new THREE.BoxGeometry(0.09, 0.42, 0.09);
-    const laMesh = new THREE.Mesh(laGeo, matSkin);
-    laMesh.position.set(0, -0.42, 0);
-    laMesh.castShadow = true;
-    laMesh.receiveShadow = true;
-    armGroup.add(laMesh);
-
-    driverGroup.add(armGroup);
-  }
-
-  // Legs onto footwell
-  for (let side of [-1, 1]) {
-    const legGroup = new THREE.Group();
-    legGroup.position.set(side * 0.26, 0.22, 1.05);
-
-    const thighGeo = new THREE.BoxGeometry(0.13, 0.56, 0.13);
-    const thighMesh = new THREE.Mesh(thighGeo, matSkin);
-    thighMesh.castShadow = true;
-    thighMesh.receiveShadow = true;
-    legGroup.add(thighMesh);
-
-    const kneeGeo = new THREE.SphereGeometry(0.15, 16, 16);
-    const kneeMesh = new THREE.Mesh(kneeGeo, matSkin);
-    kneeMesh.position.set(0, -0.56, 0);
-    kneeMesh.castShadow = true;
-    kneeMesh.receiveShadow = true;
-    legGroup.add(kneeMesh);
-
-    const shinGeo = new THREE.BoxGeometry(0.11, 0.52, 0.11);
-    const shinMesh = new THREE.Mesh(shinGeo, matSkin);
-    shinMesh.position.set(0, -0.52, 0);
-    shinMesh.castShadow = true;
-    shinMesh.receiveShadow = true;
-    legGroup.add(shinMesh);
-
-    driverGroup.add(legGroup);
-  }
-
-  // Seat belt straps (trim-colour boxes over torso)
-  for (let side of [-1, 1]) {
-    const beltGeo = new THREE.BoxGeometry(0.06, 0.9, 0.05);
-    const beltMesh = new THREE.Mesh(beltGeo, matTrim);
-    beltMesh.castShadow = true;
-    beltMesh.receiveShadow = true;
-    beltMesh.position.set(side * 0.14, 0.65, 0.75);
-    driverGroup.add(beltMesh);
-  }
-
-  // Helmet: curved lathe profile
-  const helmetPoints = [];
-  for (let i = 0; i <= 20; i++) {
-    const t = i / 20;
-    helmetPoints.push(new THREE.Vector2(0.96 * (1 - t * 0.18), 1.05 + t * 0.25));
-  }
-  const helmetGeo = new THREE.LatheGeometry(helmetPoints, 24);
-  const helmetMesh = new THREE.Mesh(helmetGeo, matHelmet);
-  helmetMesh.castShadow = true;
-  helmetMesh.receiveShadow = true;
-  helmetMesh.position.set(0, 0.72, 0.95);
-  driverGroup.add(helmetMesh);
+  // ----- Driver group (shared helper) + lathe-only steering wheel and exhausts -----
+  const { driver: driverGroup, helmet: helmetMesh, visor: visorMesh } = buildDriver(THREE, spec);
   group.userData.parts.helmet = helmetMesh;
-
-  // Visor stripe: flat plane across face (trim colour)
-  const visorGeo = new THREE.PlaneGeometry(1.10, 0.09);
-  const visorMat = new THREE.MeshStandardMaterial({ color: trim, roughness: 0.4, metalness: 0.3 });
-  const visorMesh = new THREE.Mesh(visorGeo, visorMat);
-  visorMesh.castShadow = true;
-  visorMesh.receiveShadow = true;
-  visorMesh.position.set(0, 0.67, 1.02);
-  visorMesh.rotation.x = -0.18;
-  driverGroup.add(visorMesh);
   group.userData.parts.visor = visorMesh;
 
   // Steering wheel
@@ -424,7 +463,7 @@ export function updateKartModel(group, kart, dt) {
   parts.wheels.forEach((pivot) => {
     if (pivot.userData.front) pivot.rotation.y = pivot.userData.yaw + kart.steerVis;
   });
-  if (parts.wheelSpinners) parts.wheelSpinners.forEach((sp, i) => { sp.rotation.z = spin; });
+  if (parts.wheelSpinners) parts.wheelSpinners.forEach((sp) => { sp.rotation[parts.spinAxis || 'z'] = spin; });
 
   // Body lean (roll) + pitch from hop
   group.rotation.z = kart.lean;
@@ -514,7 +553,7 @@ export function updateKartModel(group, kart, dt) {
   }
 
   // Front wheel steering update (persist per frame)
-  if (parts.wheels.length >= 2) {
+  if (!parts.model && parts.wheels.length >= 2) {   // lathe pivots only; on GLB pivots z would be camber
     parts.wheels[0].rotation.z = kart.steerVis * 0.8;
     parts.wheels[1].rotation.z = kart.steerVis * 0.8;
   }

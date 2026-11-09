@@ -617,7 +617,10 @@ function boot() {
     else if (a === 'bots') {
       if (net.mode !== 'host') return;
       net.bots = net.bots ? 0 : RACE.aiField;
-      if (!started) { buildWorld(); }   // the preview field changes with the setting
+      // no buildWorld() here: rebuilding the whole world rebuilt the HUD too, which flashed
+      // on every click and hid the label change (player report: "it just shows and hides the
+      // HUD, never changes to OFF"). The field is built for real at roomstart anyway; the
+      // Start button's racer count is the honest live feedback.
       menu.showTitle(menuInfo());
     }
     else if (a === 'roomstart') {

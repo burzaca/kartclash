@@ -548,6 +548,11 @@ export function createMenu(root, opts) {
         const action = btn.dataset.action;
         if (String(action).indexOf('rebind:') === 0) { beginRebind(action, btn); return; }
         cb(action);
+        // actions that redraw the panel (bots toggle, camera...) must NOT steal focus to the
+        // first button: the player keeps pressing their button, and the next Space/Enter must
+        // hit the SAME control (focus went to 'start' and started a race instead - report 2026-11-09)
+        const again = menuRoot.querySelector('[data-action="' + action + '"]');
+        if (again) again.focus();   // null when the action closed the menu - no focus to keep
         // see the keydown handler: 'quit' redraws the title itself; hiding afterwards = no menu
         if (action === 'start' || action === 'resume') menu.hide();
       });

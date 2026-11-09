@@ -363,6 +363,10 @@ export function buildTrack(def) {
     return {
       idx, dist, side, half,
       onRoad: (side < 0 ? -side : side) <= half - KART.radius,
+      // start-relative lap fraction (arc-continuous). race.js counts laps with this: idx/count
+      // (used before) seams at polyline vertex 0, NOT at the painted start/finish (startIdx) —
+      // the badge flipped ~100 m early, "at the last speed pad" (2026-11-09 12.30).
+      frac: fracOfS(L.s),
       tx: TX[j], tz: TZ[j], nx, nz, y,
       slopeX: (yx1 - yx0) / (2 * SLOPE_H), slopeZ: (yz1 - yz0) / (2 * SLOPE_H),
       pad, ag: AGIN[idx] === 1,

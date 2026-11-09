@@ -168,7 +168,7 @@ function runTrack(def) {
       // The player asked for the camera to "go forward": that means the visible road distance is
       // the thing to measure, so probe a ladder of distances and keep the farthest one that is
       // in frame in EVERY sampled frame.
-      const along = k.progress * track.pl.total;
+      const along = track.cum[k.plIdx];   // absolute arc — k.progress is start-relative since the lap-seam fix (2026-11-09)
       let farThisProbe = 0;
       for (const d of AHEAD_LADDER) {
         const ahead = track.pointAt(along + d, 0);

@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-09.3',
+  build: '2026-11-09.4',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,
@@ -117,6 +117,8 @@ export const AI = {
   lookahead: 14,              // m ahead the AI steers to
   cornerSlowK: 0.62,          // how hard it slows for curvature (1 = never, 0 = always)
   errorRate: 0.7,             // how fast its aim error wanders
+  skillBase: 1.12,            // field pace multiplier: a clean player laps ~20% faster than the old 1.0 field even
+                              // when hitting walls (player 33.0 s vs AI 41-48 s, 2026-11-09 12.12 screenshot)
   skillBand: 0.055,           // per-driver speed skill spread (fraction)
   rubber: { leaderBand: 1.00, tailBand: 1.06 }, // speed scale by position (mild catch-up; was 0.90/1.12 — the leader was handicapped and a player still cleared the whole field, 2026-11-09)
   itemUseChance: 0.55, itemUseCooldown: 2.5,

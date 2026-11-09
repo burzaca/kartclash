@@ -8,7 +8,7 @@ const SPACING_HINT = 2.5;
 export function createAI(spec, rng) {
   return {
     spec,
-    skill: 1 + rngRange(rng, -AI.skillBand, AI.skillBand),
+    skill: AI.skillBase + rngRange(rng, -AI.skillBand, AI.skillBand),
     lineOffset: 0,            // preferred lateral offset on the road (racing line)
     lineT: rng() * 10,
     driftT: 0,                // >0 = holding a drift for this many seconds
@@ -61,7 +61,7 @@ export function stepAI(kart, ai, track, ctx, dt) {
   // ---- corner speed: v = sqrt(a_lat * R), capped by skill and rubber band ----
   const curv = curvatureAhead(track, kart.plIdx);
   const radius = 1 / Math.max(curv, 1e-4);
-  const aLat = 17.0 * ai.skill * rubber;   // 15.5 -> 17.0: the field was being cleared by a skilled player (2026-11-09)
+  const aLat = 21.0 * ai.skill * rubber;   // player lapped 33.0 s vs the field's 42-43 s even while hitting walls (2026-11-09 12.12 screenshot): corner speed was the biggest single gap
   const vCorner = Math.sqrt(aLat * radius);
   const vMax = KART.maxSpeed * ai.skill * rubber;
 
@@ -73,7 +73,7 @@ export function stepAI(kart, ai, track, ctx, dt) {
     const cross = a.x * b.z - a.z * b.x;   // sign of the turn
     if (Math.abs(angleDiff(Math.atan2(a.z, a.x), Math.atan2(b.z, b.x))) > 0.25) { turnSign = -Math.sign(cross); break; }
   }
-  const targetLine = turnSign * Math.min(half * 0.45, 4.5);
+  const targetLine = turnSign * Math.min(half * 0.38, 3.6);   // was 0.45/4.5: clipping the inner barrier cost ~40 speed hits a lap (2026-11-09)
   ai.lineOffset = damp(ai.lineOffset, targetLine, 0.9, dt);
 
   // ---- steer toward a look-ahead point that moves with speed ----
@@ -84,9 +84,9 @@ export function stepAI(kart, ai, track, ctx, dt) {
   const look = clamp(AI.lookahead + spd * 1.15, 14, 60);
   const lookIdx = advanceIdx(pl, kart.plIdx, Math.round(look / SPACING_HINT));
   const f = frameAt(pl, lookIdx);
-  const safe = Math.max(1.0, half - 2.6);
+  const safe = Math.max(1.0, half - 3.2);
   let aimOffset = clamp(ai.lineOffset, -safe, safe);
-  const nearWall = half - 3.6;
+  const nearWall = half - 4.2;
   if (Math.abs(s.side) > nearWall) {
     aimOffset = -Math.sign(s.side) * Math.min(safe, (Math.abs(s.side) - nearWall) * 2.4 + 1.2);
   }
@@ -131,10 +131,13 @@ export function stepAI(kart, ai, track, ctx, dt) {
   let drift = false;
   if (ai.driftT > 0) { ai.driftT -= dt; drift = true; if (ai.driftT <= 0) drift = false; }
   if (!drift && ai.driftCool <= 0 && kart.air.onGround && s.onRoad) {
-    const straightish = curv > 0.004 && curv < 0.05 && Math.abs(steer) > 0.25 && kart.speed > want * 0.8;
+    const straightish = curv > 0.002 && curv < 0.06 && Math.abs(steer) > 0.15 && kart.speed > want * 0.7;
     if (straightish && rng() < AI.itemUseChance * 3 * dt) {
-      ai.driftT = rngRange(rng, 1.1, 3.6);
-      ai.driftCool = rngRange(rng, 1.5, 5.0);
+      // drift long enough to reach the super/ultra mini-turbo tiers (driftCharge 1.0/2.0/3.4 s):
+      // the player chains those for 1.3-1.45x top speed, which is exactly the pace the field
+      // was missing (player 33 s laps vs 43 s, 2026-11-09).
+      ai.driftT = rngRange(rng, 2.2, 4.2);
+      ai.driftCool = rngRange(rng, 0.6, 2.0);
       drift = true;
     }
   }

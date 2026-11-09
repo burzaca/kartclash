@@ -12,7 +12,7 @@ function resetBook(k, track) {
   const s = track.sample(k.pos.x, k.pos.z, k.plIdx);
   k.plIdx = s.idx;
   k.lap = 0;
-  k.progress = s.idx / pl.count;
+  k.progress = s.frac;
   k.lastFrac = k.progress;
   k.raceTime = 0; k.lapStart = 0; k.lapTimes = []; k.bestLap = Infinity;
   k.finished = false; k.finishTime = 0;
@@ -79,7 +79,7 @@ export function createRace(track, karts) {
 
         // --- where are we on the lap ---
         const s = track.sample(k.pos.x, k.pos.z, k.plIdx);
-        const frac = s.idx / pl.count;
+        const frac = s.frac;   // start-relative — must match the painted line, see track.sample
         k.onPad = s.pad;
         k.offRoad = !s.onRoad;
 

@@ -30,7 +30,7 @@ for (const { def, tr } of built) {
     }
     const s = tr.sample(pl.pts[5].x, pl.pts[5].z, 5);
     assert.deepEqual(Object.keys(s).sort(),
-      ['ag', 'dist', 'half', 'idx', 'nx', 'nz', 'onRoad', 'pad', 'side', 'slopeX', 'slopeZ', 'tx', 'tz', 'y'].sort());
+      ['ag', 'dist', 'frac', 'half', 'idx', 'nx', 'nz', 'onRoad', 'pad', 'side', 'slopeX', 'slopeZ', 'tx', 'tz', 'y'].sort());
     assert.equal(tr.checkpoints.length, 8);
     assert.equal(tr.itemNodes.length, def.itemNodes.length);
     assert.equal(tr.pads.length, def.boostPads.length);
@@ -244,3 +244,14 @@ for (const { def, tr } of built) {
     }
   });
 }
+
+test('sample().frac is relative to the PAINTED start/finish (regression 2026-11-09: lap counted early near the last speed pad)', () => {
+  const tr = buildTrack(TRACKS[0]);
+  const pl = tr.pl, at = (i) => pl.pts[(i + pl.count) % pl.count];
+  const p = at(tr.startIdx);
+  const f0 = tr.sample(p.x, p.z, tr.startIdx).frac;
+  assert.ok(Math.min(f0, 1 - f0) < 2e-3, `frac must be at the 0/1 seam at the checkered band, got ${f0.toFixed(4)}`);
+  const q = at(tr.startIdx + pl.count - 1);
+  const f = tr.sample(q.x, q.z, tr.startIdx + pl.count - 1).frac;
+  assert.ok(f > 0.99, `one vertex before the line must read ~1, got ${f.toFixed(3)}`);
+});

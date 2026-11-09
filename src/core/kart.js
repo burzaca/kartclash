@@ -87,7 +87,8 @@ export function applyBoost(kart, mul, time) {
 export function maxEffOf(kart) {
   const boostMul = kart.boost.time > 0 ? kart.boost.mul : 1;
   return KART.maxSpeed * boostMul * (kart.shrunk > 0 ? SHRUNK_MUL : 1)
-    * (kart.offRoad ? KART.offRoadMul : 1) * (kart.star > 0 ? KART.starMul : 1);
+    * (kart.offRoad ? KART.offRoadMul : 1) * (kart.star > 0 ? KART.starMul : 1)
+    * (kart.vmul || 1);   // per-kart top-speed multiplier (AI puts skill here; humans stay 1.0)
 }
 
 export function steerFalloffFactor(speed) {

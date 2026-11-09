@@ -1,6 +1,6 @@
 // ai.js — CPU drivers: look-ahead racing-line steering, corner speed from curvature, drift chains,
 // item usage, rubber banding. Pure: no DOM, no THREE. (PM-owned)
-import { AI, KART, ITEM, ITEM_TRIPLE } from '../config.js';
+import { AI, KART, ITEMS, ITEM, ITEM_TRIPLE } from '../config.js';
 import { clamp, damp, angleDiff, frameAt, advanceIdx, rngRange, rngPick } from '../foundation.js';
 
 const SPACING_HINT = 2.5;
@@ -65,6 +65,9 @@ export function stepAI(kart, ai, track, ctx, dt) {
   // load, and a skill-scaled target made the fast field grind walls (probe: 36 wall hits a lap,
   // zero kart-vs-kart, 2026-11-09). skill buys straights (vMax) and items, corners stay physics-honest.
   const aLat = 27.0 * rubber;
+  // straight-line punch: skill raises the kart's actual top speed through kart.vmul — before this,
+  // every AI was hard-capped at KART.maxSpeed like the player, so raising skill moved laps almost 0
+  kart.vmul = 1 + (ai.skill - 1) * 0.8;
   const vCorner = Math.sqrt(aLat * radius);
   const vMax = KART.maxSpeed * ai.skill * rubber;
 
@@ -159,6 +162,7 @@ export function stepAI(kart, ai, track, ctx, dt) {
     const go =
       (isBoost && straight) ||
       (isOffense && (front || behind)) ||
+      held === ITEM.GLOVE && nearestRival(kart, ctx.karts.filter((r) => r.place < kart.place), ITEMS.glove.range) ||
       held === ITEM.LIGHTNING || held === ITEM.STAR;
     if (go && rng() < AI.itemUseChance * dt * 6) { use = true; ai.useT = AI.itemUseCooldown; }
     else ai.useT = Math.max(ai.useT, 0.35);

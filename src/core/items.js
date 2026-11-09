@@ -247,6 +247,28 @@ export function createItemSystem(track, rng) {
         }
         return true;
       }
+      case ITEM.GLOVE: {                       // Re-Volt's Whoppa (2026-11-09): a punch, not a projectile
+        const karts = (ctx && ctx.karts) || [];
+        const fx2 = k.pos.x + Math.sin(k.heading) * 3, fz2 = k.pos.z + Math.cos(k.heading) * 3;
+        let victim = null, best = ITEMS.glove.range;
+        for (const v of karts) {
+          if (v.id === k.id || v.star > 0 || v.finished) continue;
+          const d2 = (v.pos.x - k.pos.x) ** 2 + (v.pos.z - k.pos.z) ** 2;
+          if (d2 > best * best) continue;
+          const ahead = (v.pos.x - k.pos.x) * Math.sin(k.heading) + (v.pos.z - k.pos.z) * Math.cos(k.heading);
+          if (ahead < Math.sqrt(d2) * 0.5) continue;   // must be roughly in front (±60°)
+          victim = v; best = Math.sqrt(d2);
+        }
+        if (victim) {
+          victim.spin = Math.max(victim.spin || 0, ITEMS.glove.spin);
+          victim.speed *= ITEMS.glove.slow;
+          callFx(fx, 'ring', victim.pos.x, victim.pos.y + 0.4, victim.pos.z, { color: 0xffffff, r0: 0.5, r1: 4.5, life: 0.45 });
+          callFx(fx, 'burst', victim.pos.x, victim.pos.y + 0.9, victim.pos.z, { color: 0xff5050, count: 16, speed: 5, life: 0.5 });
+        } else {
+          callFx(fx, 'burst', fx2, k.pos.y + 0.9, fz2, { color: 0xffffff, count: 10, speed: 3, life: 0.35 });   // whiffed air
+        }
+        return true;
+      }
       case ITEM.MAGNET: {                       // Re-Volt's magnet (2026-11-09)
         k.magnetT = ITEMS.magnet.time;
         makeEffect('magnet', ITEM.MAGNET, k.id, k.pos.x, k.pos.z, k.heading, 0, 1.1, ITEMS.magnet.time);

@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-09.5',
+  build: '2026-11-09.6',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,
@@ -19,14 +19,14 @@ export const GAME = {
 export const ITEM = {
   NONE: 0, MUSHROOM: 1, TRIPLE_MUSHROOM: 2, GREEN_SHELL: 3, TRIPLE_GREEN: 4,
   RED_SHELL: 5, TRIPLE_RED: 6, BANANA: 7, TRIPLE_BANANA: 8, CLOUD: 8.5 /* FAKE_ITEM */,
-  LIGHTNING: 9, STAR: 10, FAKE_ITEM: 8.5, MAGNET: 11,
+  LIGHTNING: 9, STAR: 10, FAKE_ITEM: 8.5, MAGNET: 11, GLOVE: 12,
 };
 export const ITEM_NAME = {
   [ITEM.NONE]: '', [ITEM.MUSHROOM]: 'MUSHROOM', [ITEM.TRIPLE_MUSHROOM]: 'x3 MUSHROOM',
   [ITEM.GREEN_SHELL]: 'GREEN SHELL', [ITEM.TRIPLE_GREEN]: 'x3 GREEN SHELL',
   [ITEM.RED_SHELL]: 'RED SHELL', [ITEM.TRIPLE_RED]: 'x3 RED SHELL',
   [ITEM.BANANA]: 'BANANA', [ITEM.TRIPLE_BANANA]: 'x3 BANANA',
-  [ITEM.FAKE_ITEM]: 'FAKE ITEM', [ITEM.LIGHTNING]: 'LIGHTNING', [ITEM.STAR]: 'STAR', [ITEM.MAGNET]: 'MAGNET',
+  [ITEM.FAKE_ITEM]: 'FAKE ITEM', [ITEM.LIGHTNING]: 'LIGHTNING', [ITEM.STAR]: 'STAR', [ITEM.MAGNET]: 'MAGNET', [ITEM.GLOVE]: 'BOXING GLOVE',
 };
 export const ITEM_TRIPLE = {
   [ITEM.TRIPLE_MUSHROOM]: ITEM.MUSHROOM, [ITEM.TRIPLE_GREEN]: ITEM.GREEN_SHELL,
@@ -41,6 +41,7 @@ export const ITEM_DESC = {
   [ITEM.BANANA]: 'Drops behind you. The next kart that runs over it spins out.',
   [ITEM.FAKE_ITEM]: 'Looks like a box but is a cloud: karts behind you think it is real.',
   [ITEM.MAGNET]: 'Sticks you to the racing line for a few seconds. (Borrowed from Re-Volt.)',
+  [ITEM.GLOVE]: 'Punches the kart right in front of you and knocks it spinning. (Borrowed from Re-Volt.)',
   [ITEM.LIGHTNING]: 'Every racer ahead of you shrinks and slows down.',
   [ITEM.STAR]: 'Speed, immunity to items, and you knock others just by touching them.',
 };
@@ -51,13 +52,13 @@ export const ITEM_COUNT = {
 // Weighted item table by position (MK-style: back of the pack gets the strong stuff).
 // Index 0 = 1st place. w = weight; 0 weight = impossible.
 export const ITEM_TABLE = [
-  [{ id: ITEM.MUSHROOM, w: 8 }, { id: ITEM.TRIPLE_MUSHROOM, w: 4 }, { id: ITEM.GREEN_SHELL, w: 30 }, { id: ITEM.TRIPLE_GREEN, w: 12 }, { id: ITEM.BANANA, w: 30 }, { id: ITEM.TRIPLE_BANANA, w: 10 }, { id: ITEM.FAKE_ITEM, w: 6 }, { id: ITEM.RED_SHELL, w: 0 }, { id: ITEM.TRIPLE_RED, w: 0 }, { id: ITEM.LIGHTNING, w: 0 }, { id: ITEM.STAR, w: 0 }, { id: ITEM.MAGNET, w: 8 }],
-  [{ id: ITEM.MUSHROOM, w: 10 }, { id: ITEM.TRIPLE_MUSHROOM, w: 5 }, { id: ITEM.GREEN_SHELL, w: 22 }, { id: ITEM.TRIPLE_GREEN, w: 18 }, { id: ITEM.BANANA, w: 22 }, { id: ITEM.TRIPLE_BANANA, w: 15 }, { id: ITEM.FAKE_ITEM, w: 5 }, { id: ITEM.RED_SHELL, w: 3 }, { id: ITEM.TRIPLE_RED, w: 2 }, { id: ITEM.LIGHTNING, w: 0 }, { id: ITEM.STAR, w: 0 }, { id: ITEM.MAGNET, w: 8 }],
-  [{ id: ITEM.MUSHROOM, w: 12 }, { id: ITEM.TRIPLE_MUSHROOM, w: 7 }, { id: ITEM.GREEN_SHELL, w: 15 }, { id: ITEM.TRIPLE_GREEN, w: 22 }, { id: ITEM.BANANA, w: 15 }, { id: ITEM.TRIPLE_BANANA, w: 18 }, { id: ITEM.FAKE_ITEM, w: 4 }, { id: ITEM.RED_SHELL, w: 8 }, { id: ITEM.TRIPLE_RED, w: 6 }, { id: ITEM.LIGHTNING, w: 2 }, { id: ITEM.STAR, w: 0 }, { id: ITEM.MAGNET, w: 8 }],
-  [{ id: ITEM.MUSHROOM, w: 12 }, { id: ITEM.TRIPLE_MUSHROOM, w: 9 }, { id: ITEM.GREEN_SHELL, w: 10 }, { id: ITEM.TRIPLE_GREEN, w: 22 }, { id: ITEM.BANANA, w: 10 }, { id: ITEM.TRIPLE_BANANA, w: 18 }, { id: ITEM.FAKE_ITEM, w: 4 }, { id: ITEM.RED_SHELL, w: 14 }, { id: ITEM.TRIPLE_RED, w: 10 }, { id: ITEM.LIGHTNING, w: 5 }, { id: ITEM.STAR, w: 1 }, { id: ITEM.MAGNET, w: 8 }],
-  [{ id: ITEM.MUSHROOM, w: 10 }, { id: ITEM.TRIPLE_MUSHROOM, w: 12 }, { id: ITEM.GREEN_SHELL, w: 6 }, { id: ITEM.TRIPLE_GREEN, w: 18 }, { id: ITEM.BANANA, w: 6 }, { id: ITEM.TRIPLE_BANANA, w: 14 }, { id: ITEM.FAKE_ITEM, w: 3 }, { id: ITEM.RED_SHELL, w: 20 }, { id: ITEM.TRIPLE_RED, w: 16 }, { id: ITEM.LIGHTNING, w: 8 }, { id: ITEM.STAR, w: 3 }, { id: ITEM.MAGNET, w: 8 }],
-  [{ id: ITEM.MUSHROOM, w: 8 }, { id: ITEM.TRIPLE_MUSHROOM, w: 14 }, { id: ITEM.GREEN_SHELL, w: 4 }, { id: ITEM.TRIPLE_GREEN, w: 14 }, { id: ITEM.BANANA, w: 4 }, { id: ITEM.TRIPLE_BANANA, w: 12 }, { id: ITEM.FAKE_ITEM, w: 3 }, { id: ITEM.RED_SHELL, w: 24 }, { id: ITEM.TRIPLE_RED, w: 22 }, { id: ITEM.LIGHTNING, w: 12 }, { id: ITEM.STAR, w: 5 }, { id: ITEM.MAGNET, w: 8 }],
-  [{ id: ITEM.MUSHROOM, w: 6 }, { id: ITEM.TRIPLE_MUSHROOM, w: 15 }, { id: ITEM.GREEN_SHELL, w: 3 }, { id: ITEM.TRIPLE_GREEN, w: 10 }, { id: ITEM.BANANA, w: 3 }, { id: ITEM.TRIPLE_BANANA, w: 10 }, { id: ITEM.FAKE_ITEM, w: 2 }, { id: ITEM.RED_SHELL, w: 25 }, { id: ITEM.TRIPLE_RED, w: 25 }, { id: ITEM.LIGHTNING, w: 15 }, { id: ITEM.STAR, w: 8 }, { id: ITEM.MAGNET, w: 8 }],
+  [{ id: ITEM.MUSHROOM, w: 8 }, { id: ITEM.TRIPLE_MUSHROOM, w: 4 }, { id: ITEM.GREEN_SHELL, w: 30 }, { id: ITEM.TRIPLE_GREEN, w: 12 }, { id: ITEM.BANANA, w: 30 }, { id: ITEM.TRIPLE_BANANA, w: 10 }, { id: ITEM.FAKE_ITEM, w: 6 }, { id: ITEM.RED_SHELL, w: 0 }, { id: ITEM.TRIPLE_RED, w: 0 }, { id: ITEM.LIGHTNING, w: 0 }, { id: ITEM.STAR, w: 0 }, { id: ITEM.MAGNET, w: 8 },],
+  [{ id: ITEM.MUSHROOM, w: 10 }, { id: ITEM.TRIPLE_MUSHROOM, w: 5 }, { id: ITEM.GREEN_SHELL, w: 22 }, { id: ITEM.TRIPLE_GREEN, w: 18 }, { id: ITEM.BANANA, w: 22 }, { id: ITEM.TRIPLE_BANANA, w: 15 }, { id: ITEM.FAKE_ITEM, w: 5 }, { id: ITEM.RED_SHELL, w: 3 }, { id: ITEM.TRIPLE_RED, w: 2 }, { id: ITEM.LIGHTNING, w: 0 }, { id: ITEM.STAR, w: 0 }, { id: ITEM.MAGNET, w: 8 }, { id: ITEM.GLOVE, w: 6 }],
+  [{ id: ITEM.MUSHROOM, w: 12 }, { id: ITEM.TRIPLE_MUSHROOM, w: 7 }, { id: ITEM.GREEN_SHELL, w: 15 }, { id: ITEM.TRIPLE_GREEN, w: 22 }, { id: ITEM.BANANA, w: 15 }, { id: ITEM.TRIPLE_BANANA, w: 18 }, { id: ITEM.FAKE_ITEM, w: 4 }, { id: ITEM.RED_SHELL, w: 8 }, { id: ITEM.TRIPLE_RED, w: 6 }, { id: ITEM.LIGHTNING, w: 2 }, { id: ITEM.STAR, w: 0 }, { id: ITEM.MAGNET, w: 8 }, { id: ITEM.GLOVE, w: 8 }],
+  [{ id: ITEM.MUSHROOM, w: 12 }, { id: ITEM.TRIPLE_MUSHROOM, w: 9 }, { id: ITEM.GREEN_SHELL, w: 10 }, { id: ITEM.TRIPLE_GREEN, w: 22 }, { id: ITEM.BANANA, w: 10 }, { id: ITEM.TRIPLE_BANANA, w: 18 }, { id: ITEM.FAKE_ITEM, w: 4 }, { id: ITEM.RED_SHELL, w: 14 }, { id: ITEM.TRIPLE_RED, w: 10 }, { id: ITEM.LIGHTNING, w: 5 }, { id: ITEM.STAR, w: 1 }, { id: ITEM.MAGNET, w: 8 }, { id: ITEM.GLOVE, w: 10 }],
+  [{ id: ITEM.MUSHROOM, w: 10 }, { id: ITEM.TRIPLE_MUSHROOM, w: 12 }, { id: ITEM.GREEN_SHELL, w: 6 }, { id: ITEM.TRIPLE_GREEN, w: 18 }, { id: ITEM.BANANA, w: 6 }, { id: ITEM.TRIPLE_BANANA, w: 14 }, { id: ITEM.FAKE_ITEM, w: 3 }, { id: ITEM.RED_SHELL, w: 20 }, { id: ITEM.TRIPLE_RED, w: 16 }, { id: ITEM.LIGHTNING, w: 8 }, { id: ITEM.STAR, w: 3 }, { id: ITEM.MAGNET, w: 8 }, { id: ITEM.GLOVE, w: 12 }],
+  [{ id: ITEM.MUSHROOM, w: 8 }, { id: ITEM.TRIPLE_MUSHROOM, w: 14 }, { id: ITEM.GREEN_SHELL, w: 4 }, { id: ITEM.TRIPLE_GREEN, w: 14 }, { id: ITEM.BANANA, w: 4 }, { id: ITEM.TRIPLE_BANANA, w: 12 }, { id: ITEM.FAKE_ITEM, w: 3 }, { id: ITEM.RED_SHELL, w: 24 }, { id: ITEM.TRIPLE_RED, w: 22 }, { id: ITEM.LIGHTNING, w: 12 }, { id: ITEM.STAR, w: 5 }, { id: ITEM.MAGNET, w: 8 }, { id: ITEM.GLOVE, w: 14 }],
+  [{ id: ITEM.MUSHROOM, w: 6 }, { id: ITEM.TRIPLE_MUSHROOM, w: 15 }, { id: ITEM.GREEN_SHELL, w: 3 }, { id: ITEM.TRIPLE_GREEN, w: 10 }, { id: ITEM.BANANA, w: 3 }, { id: ITEM.TRIPLE_BANANA, w: 10 }, { id: ITEM.FAKE_ITEM, w: 2 }, { id: ITEM.RED_SHELL, w: 25 }, { id: ITEM.TRIPLE_RED, w: 25 }, { id: ITEM.LIGHTNING, w: 15 }, { id: ITEM.STAR, w: 8 }, { id: ITEM.MAGNET, w: 8 }, { id: ITEM.GLOVE, w: 16 }],
 ];
 export function tableForPlace(place, fieldSize) {
   const i = Math.min(ITEM_TABLE.length - 1, Math.max(0, Math.round((place - 1) / Math.max(1, fieldSize) * (ITEM_TABLE.length - 1))));
@@ -76,6 +77,7 @@ export const ITEMS = {
   redHomingRadius: 60, redTurnRate: 2.6,
   banana: { life: 26, radius: 1.3, dropBack: 6.0 },
   cloud: { invisTime: 6.0 },
+  glove: { range: 7.0, spin: 1.1, slow: 0.45 },   // Re-Volt's Whoppa: no projectile — it punches the nearest kart ahead
   magnet: { time: 6.0 },
   lightning: { shrinkTime: 4.0, slowFactor: 0.55 },
   star: { time: 9.0, hitRadiusBonus: 0.6 },

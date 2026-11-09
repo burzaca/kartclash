@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ITEM, ITEM_COUNT, ITEMS, KART, PLAYERS, tableForPlace } from '../src/config.js';
+import { ITEM, ITEM_COUNT, ITEM_TABLE, ITEMS, KART, PLAYERS, tableForPlace } from '../src/config.js';
 import { mulberry32, buildPolyline, nearestOnPolyline, frameAt, advanceIdx } from '../src/foundation.js';
 import { createItemSystem } from '../src/core/items.js';
 
@@ -535,4 +535,30 @@ test('MAGNET is in every position table (it helps any place equally)', () => {
     const t = tableForPlace(p + 1, 6);
     assert.ok(t.some((e) => e.id === ITEM.MAGNET && e.w > 0), `place ${p + 1} has no magnet`);
   }
+});
+
+test('BOXING GLOVE (Re-Volt): punches the nearest kart ahead, misses what is behind', () => {
+  const track = makeLoopTrack();
+  const items = createItemSystem(track, mulberry32(7));
+  const me = makeTestKart(0); me.heading = 0;   // forward = +Z
+  const ahead = makeTestKart(1); ahead.pos = { x: 0, y: 0, z: 5 }; ahead.heading = 0;
+  const behind = makeTestKart(2); behind.pos = { x: 0, y: 0, z: -5 }; behind.heading = 0;
+  const ctx = { karts: [me, ahead, behind] };
+  me.item = ITEM.GLOVE; me.count = 1;
+  assert.ok(items.use(me, ctx));
+  assert.ok(ahead.spin > 0, 'kart ahead should be spun out');
+  assert.equal(behind.spin, 0, 'kart behind must be untouched');
+
+  // out of range: still consumed, nobody spun (a punch in the air is a miss, not an error)
+  const far = makeTestKart(3); far.pos = { x: 0, y: 0, z: 30 }; far.heading = 0;
+  const me2 = makeTestKart(4); me2.heading = 0;
+  const ctx2 = { karts: [me2, far] };
+  me2.item = ITEM.GLOVE; me2.count = 1;
+  assert.ok(items.use(me2, ctx2));
+  assert.equal(far.spin, 0, 'out of range must miss');
+});
+
+test('glove never appears for the leader (chaser weapon, rows 2+ only)', () => {
+  assert.ok(!ITEM_TABLE[0].some((e) => e.id === ITEM.GLOVE && e.w > 0));
+  assert.ok(ITEM_TABLE[6].some((e) => e.id === ITEM.GLOVE && e.w > 0));
 });

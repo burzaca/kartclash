@@ -110,21 +110,8 @@ function buildGlbKart(THREE, spec, scene) {
   kart.position.set(fit.offset.x, fit.offset.y, fit.offset.z);
   group.updateMatrixWorld(true);
 
-  // driver: hips on the seat's top face, scaled to DRIVER_H (measured, not guessed)
-  const { driver, helmet, visor, legs } = buildDriver(THREE, spec);
-  driver.updateMatrixWorld(true);
-  const db = new THREE.Box3().setFromObject(driver), lb = new THREE.Box3();
-  for (const l of legs) lb.union(new THREE.Box3().setFromObject(l));
-  const seatObj = kart.getObjectByName('Kart_seat');
-  const sb = seatObj ? new THREE.Box3().setFromObject(seatObj) : kb.clone().applyMatrix4(kart.matrixWorld);
-  const lc = lb.getCenter(new THREE.Vector3()), sc = sb.getCenter(new THREE.Vector3());
-  const st = seatTransform(db.min.y, db.max.y, { x: lc.x, y: lb.max.y, z: lc.z }, { x: sc.x, y: sb.max.y, z: sc.z });
-  driver.scale.setScalar(st.scale);
-  driver.position.set(st.position.x, st.position.y, st.position.z);
-  rig.add(driver);
-
   group.userData.parts = { body: kart, chassis: null, wheels, wheelSpinners: spinners, spinAxis: 'x',
-    driver, helmet, visor, exhaust: [], flame: [], shield: null, spark: null, shadowBlob: null,
+    driver: null, helmet: null, visor: null, exhaust: [], flame: [], shield: null, spark: null, shadowBlob: null,
     rig, paint, model: 'glb', fit: fit.scale };
   return group;
 }

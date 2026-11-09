@@ -639,3 +639,11 @@ test('MAGNET auto-steers a misaligned kart back onto the centre line', () => {
   assert.ok(err < 0.05, `magnet left heading error ${err.toFixed(3)} rad`);
   assert.ok(k.magnetT < 5 - 0.9, 'magnet timer must tick down');
 });
+
+test('kart.vmul scales top speed (the AI straight-line lever)', async () => {
+  const { maxEffOf } = await import('../src/core/kart.js');
+  const k = newKart();
+  const base = maxEffOf(k);
+  k.vmul = 1.3;
+  assert.ok(maxEffOf(k) > base * 1.29, 'vmul must raise the speed ceiling');
+});

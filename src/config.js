@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-09.7',
+  build: '2026-11-09.8',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,
@@ -150,7 +150,7 @@ export const CAM = {
   camKeys: { KeyC: 0, KeyM: 1 },           // per-player camera cycling (P1 = C, P2 = M)
   fov: 64, fovBoost: 68, fovSpeed: 0.08,   // player asked: never fall far at speed; only a mild fov kick
   near: 0.5, far: 900,
-  speedPull: 0.8, upPull: 0.3, boostPull: 0.6, hitPull: 1.6,   // +pull right after a hit/spin, until the kart is driving again   // keep framing near-constant at any speed
+  speedPull: 0.8, upPull: 0.3, boostPull: 0.6, hitPull: 1.6, crawlPull: 1.5, crawlSpeed: 9.0,   // +pull right after a hit/spin, until the kart is driving again   // keep framing near-constant at any speed
   split: 'horizontal',                       // 2P: stacked halves (classic MK on TV)
   shakeDecay: 4.0,
 };
@@ -186,41 +186,7 @@ export const KEYMAP_LABEL = {
 };
 export const GLOBAL_KEYS = { start: ['Enter'], restart: ['KeyR'], pause: ['KeyP', 'Escape'], split: ['KeyT'] };
 
-// ---------------------------------------------------------------- tracks
-// Control points are authored HERE (the PM owns the layout). Everything derived —
-// width profile, elevation, surface, barriers, scenery — is built by the track module.
-export const TRACKS = [
-  {
-    id: 'mushroom-circuit', name: 'MUSHROOM CIRCUIT', width: 15, widthVar: 0.10,
-    laps: 3, seed: 20261101,
-    ctrl: [
-      { x: -150, z: -95 }, { x: -40, z: -105 }, { x: 70, z: -95 }, { x: 140, z: -55 },
-      { x: 150, z: 10 }, { x: 105, z: 60 }, { x: 150, z: 105 }, { x: 90, z: 140 },
-      { x: -30, z: 120 }, { x: -120, z: 135 }, { x: -160, z: 80 }, { x: -120, z: 20 },
-      { x: -165, z: -30 },
-    ],
-    // features as fractions of the lap (0..1) — deterministic, authored, not random
-    itemNodes: [0.055, 0.42, 0.74],
-    boostPads: [{ t: 0.185, w: 0.5 }, { t: 0.60, w: 0.42 }, { t: 0.905, w: 0.5 }],
-    ag: [{ t: 0.45, t2: 0.58, amp: 2.6 }],     // anti-gravity banked section (lap fractions)
-    elev: { amp: 2.2, waves: 3, phase: 0.4 },   // gentle elevation, metres
-    theme: { grass: 0x5f9a4a, road: 0x53565e, curb: 0xd8232a, wall: 0xe8e1d5, trees: 0x2f7a3a },
-  },
-  {
-    id: 'shell-coast', name: 'SHELL COAST', width: 14, widthVar: 0.14,
-    laps: 3, seed: 777001,
-    ctrl: [
-      { x: -120, z: -140 }, { x: 30, z: -130 }, { x: 130, z: -110 }, { x: 165, z: -30 },
-      { x: 120, z: 40 }, { x: 40, z: 20 }, { x: -20, z: 70 }, { x: 60, z: 130 },
-      { x: -40, z: 155 }, { x: -140, z: 110 }, { x: -165, z: 20 }, { x: -140, z: -60 },
-    ],
-    itemNodes: [0.08, 0.36, 0.90],
-    boostPads: [{ t: 0.26, w: 0.5 }, { t: 0.55, w: 0.35 }, { t: 0.84, w: 0.5 }],
-    ag: [{ t: 0.62, t2: 0.75, amp: 2.8 }],
-    elev: { amp: 3.0, waves: 4, phase: 1.7 },
-    theme: { grass: 0x7fae5c, road: 0x6b5a4a, curb: 0x1c86d1, wall: 0xf0e6d2, trees: 0x3d8a5f },
-  },
-];
+export { TRACKS } from './tracks.js';
 
 // ---------------------------------------------------------------- scoring / hud
 export const RACE = {

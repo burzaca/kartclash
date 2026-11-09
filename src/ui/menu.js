@@ -231,6 +231,43 @@ export function createMenu(root, opts) {
     btnSwitch.textContent = 'Switch Track';
     btnSwitch.dataset.action = 'switch';
     btnGrp.appendChild(btnSwitch);
+
+    // ---- ROOM (online): a 4-letter code is the invite pass — only someone who has it can dial in.
+    // Host-authoritative (main.js + core/net.js); v1 field = host + 1 guest + optional bots,
+    // because the split-screen HUD has exactly two camera slots. ----
+    const room = info.room || { mode: 'solo' };
+    const mkBtn = (label, action) => {
+      const b = document.createElement('button');
+      b.className = 'kc-btn'; b.textContent = label; b.dataset.action = action;
+      btnGrp.appendChild(b);
+      return b;
+    };
+    if (room.mode === 'solo') {
+      const inp = document.createElement('input');
+      inp.className = 'kc-code-input';
+      inp.placeholder = 'ROOM CODE'; inp.maxLength = 4; inp.spellcheck = false;
+      inp.setAttribute('aria-label', 'room code to join');
+      inp.style.cssText = 'width:calc(var(--kc-scale)*9rem);text-align:center;letter-spacing:0.3em;' +
+        'font:inherit;background:rgba(0,0,0,0.35);color:#fff;border:1px solid rgba(255,255,255,0.25);' +
+        'border-radius:0.4rem;padding:0.4rem 0.5rem;';
+      btnGrp.appendChild(inp);
+      mkBtn('Host a Room', 'host');
+      mkBtn('Join Room', 'join');
+    } else if (room.mode === 'host') {
+      mkBtn(room.bots ? 'Bots: ON (' + room.bots + ')' : 'Bots: OFF', 'bots');
+      mkBtn('Start Room Race (' + room.racers + (room.racers === 1 ? ' racer)' : ' racers)'), 'roomstart');
+      mkBtn('Leave Room', 'leave');
+    } else if (room.mode === 'client') {
+      mkBtn('Leave Room', 'leave');
+    }
+    const roomNote = document.createElement('div');
+    roomNote.className = 'kc-room-note';
+    roomNote.style.cssText = 'margin-top:calc(var(--kc-scale)*0.6rem);color:#9fb7c9;' +
+      'font-size:calc(var(--kc-scale)*0.75rem);text-align:center;min-height:1.2em;';
+    if (room.mode === 'solo') roomNote.textContent = 'Online: host a room and share the 4-letter code — only people with the code can join.';
+    else if (room.mode === 'host') roomNote.textContent = 'ROOM CODE ' + room.code + ' - share it. Guest: ' + (room.guest || 'nobody yet') + (room.note ? '. ' + room.note : '. Switch Track / Bots set the race, then Start.');
+    else roomNote.textContent = 'Room ' + room.code + ': ' + (room.note || 'waiting for the host...');
+    menuRoot.appendChild(roomNote);
     // no Restart button here: at the title there is no race to restart — it sat dead
     // (a "Restart does nothing" report, 2026-11-09). The pause menu carries it instead.
 
@@ -389,6 +426,7 @@ export function createMenu(root, opts) {
     onAction(cb) {
       // bind keydown handling on the document; cb receives the chosen action
       function handler(e) {
+        if (e.target && e.target.tagName === 'INPUT') return;   // typing a room code is not a menu keystroke
         // allow navigation only while a mode is active
         if (visibleMode !== 'title' && visibleMode !== 'pause' && visibleMode !== 'controls') return;
 

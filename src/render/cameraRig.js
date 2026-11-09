@@ -81,7 +81,10 @@ export function createCameraRig(THREE) {
         // A kart that was just rammed or spun is momentarily slow right in front of the camera —
         // without a pull this reads as 'the kart fills the screen' (probe --cam=close, 38.4%, 2026-11-09).
         const hit = k.hitFlash > 0 || k.spin > 0 ? CAM.hitPull : 0;
-        const back = pose.back + spd * CAM.speedPull + (k.boost.time > 0 ? CAM.boostPull : 0) + hit;
+        // crawling (after a wall, mid-air landing, any near-stop): back off so the kart never
+        // fills the frame while it is barely moving — framing is about SPEED, not distance drift
+        const crawl = Math.max(0, 1 - Math.abs(k.speed) / CAM.crawlSpeed) * CAM.crawlPull;
+        const back = pose.back + spd * CAM.speedPull + (k.boost.time > 0 ? CAM.boostPull : 0) + hit + crawl;
         const up = pose.up + spd * CAM.upPull;
         const px = k.pos.x - fx * back, pz = k.pos.z - fz * back;
         const wantH = track.surfaceY(px, pz) + up + k.air.y * 0.55;

@@ -5,6 +5,7 @@ import { GAME, RACE, CAM, KART, PLAYERS, AI_DRIVERS, KEYMAP, GLOBAL_KEYS, TRACKS
 import { clamp, damp, lerp, mulberry32, hashSeed } from './foundation.js';
 import { buildTrack } from './core/track.js';
 import { createControllers } from './core/input.js';
+import { packSnap, createReceiver, applySnap, packInput, applyInput } from './core/net.js';
 import { createKart, stepKart, resolveKartCollisions, resetKart } from './core/kart.js';
 import { createItemSystem } from './core/items.js';
 import { createRace, standings, rank, perfectStart } from './core/race.js';
@@ -22,7 +23,7 @@ window.__bootErr = null;
 const qs = new URLSearchParams(location.search);
 
 // URL options are read once, at module scope, so any function can use them.
-const trackIdx = Math.max(0, TRACKS.findIndex((t) => t.id === qs.get('track')));
+let trackIdx = Math.max(0, TRACKS.findIndex((t) => t.id === qs.get('track')));
 const wantSolo = qs.get('p') === '1';
 const allAI = qs.get('test') === '1';
 const shotName = qs.get('shot') || null;
@@ -81,8 +82,15 @@ function boot() {
     // ---------- racers: humans + AI field ----------
     karts = [];
     const specs = [];
-    for (let i = 0; i < humanCount; i++) specs.push({ spec: PLAYERS[i], human: true });
-    for (let i = 0; i < RACE.aiField; i++) specs.push({ spec: AI_DRIVERS[i % AI_DRIVERS.length], human: false });
+    const humanNames = net.mode === 'host' ? ['YOU', net.guestName || 'RIVAL'] : (net.hostNames || null);
+    for (let i = 0; i < humanCount; i++) {
+      const spec = { ...PLAYERS[i % PLAYERS.length] };
+      if (humanNames && humanNames[i]) spec.name = humanNames[i];
+      specs.push({ spec, human: true });
+    }
+    // rooms own their bot count (the user asked for a bots-off option); solo keeps the full field
+    const nBots = net.mode === 'solo' ? RACE.aiField : net.bots;
+    for (let i = 0; i < nBots; i++) specs.push({ spec: AI_DRIVERS[i % AI_DRIVERS.length], human: false });
     if (allAI) for (const s of specs) s.human = false;
 
     const aiRng = mulberry32(track.def.seed ^ 0x9e37);
@@ -90,6 +98,10 @@ function boot() {
       const { spec, human } = specs[i];
       const k = createKart(i, spec, human);
       k.ai = human ? null : createAI(spec, aiRng);
+      // guest mirrors: every kart except mine is host-owned; host marks its guest kart remote
+      k.remote = false;
+      if (human && net.mode === 'client' && i !== net.myIdx) k.remote = true;
+      if (human && net.mode === 'host' && i > 0) k.remote = true;
       k.plIdx = track.startIdx;
       karts.push(k);
       const g = buildKartModel(THREE, spec);
@@ -105,7 +117,7 @@ function boot() {
 
     controllers = [];
     for (let i = 0; i < karts.length; i++) {
-      if (!karts[i].human) continue;
+      if (!karts[i].human || karts[i].remote) continue;
       const c = createControllers(1, [{ human: true, keys: karts[i].spec.keys }])[0];
       c.attach();
       controllers[karts[i].id] = c;
@@ -136,6 +148,11 @@ function boot() {
       tracks: TRACKS.map((t, i) => ({ name: t.name, selected: i === trackIdx })),
       players: PLAYERS.slice(0, humanCount).map((p) => ({ name: p.name, keys: p.keys, color: p.color })),
       camera: rig.presetName(),
+      room: {
+        mode: net.mode, code: net.code, note: net.note, guest: net.guestName,
+        bots: net.mode === 'solo' ? RACE.aiField : net.bots,
+        racers: net.mode === 'host' ? 1 + (net.conn ? 1 : 0) + net.bots : 0,
+      },
     };
   }
   function toTitle() {
@@ -148,6 +165,20 @@ function boot() {
     hud.hideResults();              // grid, not a field at world origin ("green land", 2026-11-09)
     menu.showTitle(menuInfo());
   }
+
+  // ---------- ROOMS: host-authoritative online multiplayer (2026-11-09) ----------
+  // The room code IS the invite pass — the host's PeerJS id is 'kc-<code>', so only someone who
+  // was given the code can dial in. The host runs the real simulation; guests send quantized
+  // inputs and mirror interpolated snapshots (net.js). v1 field: host + 1 guest + optional bots —
+  // the split-screen HUD has exactly two camera slots (4-way split = future work).
+  const net = { mode: 'solo', peer: null, code: '', conn: null, note: '', bots: RACE.aiField, guestName: '', hostNames: null };
+  const recv = createReceiver();
+  let netInput = null;   // host side: latest guest input by kart id
+  let snapAcc = 0;
+  const newRoomCode = () => { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23345678'.split(''); let c = ''; for (let i = 0; i < 4; i++) c += A[Math.floor(Math.random() * A.length)]; return c; };
+  const sendRoom = (m) => { if (net.conn && net.conn.open) { try { net.conn.send(m); } catch { /* dropped */ } } };
+  window.__net = net; net.sendRoom = sendRoom;   // observability hook: inspect + poke rooms from the console
+
   function startRace() {
     started = true; paused = false;
     hud.setHidden(false);
@@ -155,6 +186,130 @@ function boot() {
     race.start();
     hud.hideResults();
   }
+  // ---- room controls (host authoritative; the 4-letter code is the invite pass) ----
+  const cfgMsg = () => ({ t: 'cfg', trackIdx, humans: net.conn ? 2 : 1, bots: net.bots,
+    names: ['YOU', net.guestName || 'RIVAL'], me: 1 });
+  function peerLib() {
+    if (!window.Peer) { net.note = 'the room library failed to load - check your connection'; return null; }
+    return window.Peer;
+  }
+  function hostRoom() {
+    const Peer = peerLib(); if (!Peer) { menu.showTitle(menuInfo()); return; }
+    net.code = newRoomCode(); net.mode = 'host'; net.note = '';
+    net.peer = new Peer('kc-' + net.code.toLowerCase());
+    net.peer.on('open', () => { net.note = ''; menu.showTitle(menuInfo()); });
+    net.peer.on('error', (e) => {
+      net.note = 'room offline (' + (e && e.type || 'network') + ') - try again';
+      net.mode = 'solo'; net.peer = null; menu.showTitle(menuInfo());
+    });
+    // one guest in v1: the split-screen HUD has exactly two camera slots (4-way split = later)
+    net.peer.on('connection', (c) => {
+      if (net.conn) { c.close(); return; }
+      net.conn = c;
+      c.on('data', (m) => {
+        if (m.t === 'hello') {
+          net.guestName = String(m.name || 'RIVAL').slice(0, 12);
+          if (started) sendRoom(cfgMsg());          // joining mid-race: hand them the live world
+          menu.showTitle(menuInfo());
+        } else if (m.t === 'i') { (netInput || (netInput = {}))[1] = m; }
+      });
+      c.on('close', () => {
+        net.conn = null; netInput = null; net.guestName = '';
+        if (started) { toTitle(); } else { buildWorld(); }
+        menu.showTitle(menuInfo());
+      });
+      menu.showTitle(menuInfo());
+    });
+    menu.showTitle(menuInfo());
+  }
+  function joinRoom() {
+    const Peer = peerLib(); if (!Peer) { menu.showTitle(menuInfo()); return; }
+    const inp = uiRoot.querySelector('.kc-code-input');
+    const code = String((inp && inp.value) || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 4) { net.note = 'enter the 4-letter room code first'; menu.showTitle(menuInfo()); return; }
+    net.code = code; net.mode = 'client'; net.note = 'dialling ' + code + '...';
+    net.peer = new Peer();
+    net.peer.on('error', (e) => {
+      net.note = 'cannot reach room ' + code + ' (' + (e && e.type || 'offline') + ')';
+      net.mode = 'solo'; net.peer = null; menu.showTitle(menuInfo());
+    });
+    net.peer.on('open', () => {
+      const c = net.peer.connect('kc-' + code.toLowerCase());
+      net.conn = c;
+      c.on('open', () => { c.send({ t: 'hello', name: 'RIVAL' }); net.note = 'waiting for the host to start...'; menu.showTitle(menuInfo()); });
+      c.on('data', (m) => {
+        if (m.t === 'cfg') startClientRace(m);
+        else if (m.t === 's') recv.feed(m, performance.now() / 1000);
+      });
+      c.on('close', () => {
+        net.conn = null;
+        if (started) toTitle();
+        net.mode = 'solo'; net.note = 'the host left'; menu.showTitle(menuInfo());
+      });
+    });
+    menu.showTitle(menuInfo());
+  }
+  function startClientRace(cfg) {
+    net.myIdx = cfg.me; net.hostNames = cfg.names; net.bots = cfg.bots;
+    trackIdx = cfg.trackIdx; humanCount = Math.max(1, cfg.humans);
+    buildWorld();
+    started = true; paused = false; hud.setHidden(false); menu.hide();
+    race.start();
+  }
+  function leaveRoom() {
+    if (net.conn) { try { net.conn.close(); } catch { /* already gone */ } }
+    if (net.peer) { try { net.peer.destroy(); } catch { /* already gone */ } }
+    net.conn = null; net.peer = null; net.code = ''; net.guestName = ''; net.myIdx = -1; net.note = '';
+    net.mode = 'solo'; netInput = null;
+    if (started) toTitle(); else { buildWorld(); menu.showTitle(menuInfo()); }
+  }
+
+  // A guest runs no race logic: predict own kart, mirror the rest, send input (see net.js).
+  function clientTick(dt, nowMs) {
+    const own = karts[net.myIdx];
+    if (!own) return;
+    if (own.finished) {
+      own.input.throttle = Math.abs(own.speed) > 0.4 ? -1 : 0;
+      own.input.steer = 0; own.input.drift = false; own.input.use = false;
+    } else if (controllers[own.id]) {
+      const it = controllers[own.id].intent();
+      own.input.throttle = it.throttle; own.input.steer = it.steer; own.input.drift = it.drift; own.input.use = it.use;
+    }
+    if (race.phase !== 'racing') { own.input.use = false; own.input.drift = false; }
+    // ctxLite: the physics mirror only reads ctx.fx (verified 2026-11-09) — collisions, items
+    // and scoring stay host-owned and arrive through the snapshot.
+    if (race.phase === 'racing') stepKart(own, track, dt, { karts, track, items: null, fx, rng: sessionRng, time: race.clock });
+    if (net.conn && net.conn.open) { try { net.conn.send(packInput(own)); } catch { /* dropped */ } }
+    const snap = recv.at(nowMs / 1000);
+    if (snap) { applySnap(karts, race, snap, own.id, 0.3); mirrorEffects(snap.raw.e); }
+    if ((race.phase === 'finished' || own.finished) && !paused) {
+      race._resT = (race._resT || 0) + dt;
+      if (!race._shown || race._resT > 1) { race._shown = true; race._resT = 0; hud.results(buildStandingsView()); }
+    }
+  }
+
+  // snapshot effects -> local effect objects. Object IDENTITY matters (the renderer keys its
+  // effect meshes by object), so mirror into reused objects and mark unseen ones inactive.
+  const clientFxMap = new Map();
+  function mirrorEffects(list) {
+    if (!list) return;
+    const seen = new Set();
+    for (const u of list) {
+      const key = u.k + ':' + u.o + ':' + u.m;
+      let e = clientFxMap.get(key);
+      if (!e) {
+        e = { kind: u.k, item: u.m, owner: u.o, pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, z: 0 },
+          heading: 0, radius: 0, life: 0, active: true, homing: null, spin: 6, idx: -1, wallHits: 0 };
+        clientFxMap.set(key, e); items.effects.push(e);
+      }
+      e.pos.x = u.x * 0.01; e.pos.y = u.y * 0.01; e.pos.z = u.z * 0.01;
+      e.radius = (u.r || 0) * 0.01; e.heading = (u.h || 0) * 0.001; e.life = u.l || 0;
+      e.homing = u.hm ? { t: u.ht | 0, i: u.hi } : null;
+      e.active = true; seen.add(e);
+    }
+    for (const e of items.effects) if (!seen.has(e)) e.active = false;
+  }
+
   // Pause is one operation, not four flags: the HUD must go with it (its panels covered the
   // pause menu's buttons, player report 2026-11-09) and a frozen race needs no race data.
   function setPaused(v) {
@@ -224,7 +379,10 @@ function boot() {
         k.input.steer = 0; k.input.drift = false; k.input.use = false;
         continue;
       }
-      if (k.human && controllers[k.id]) {
+      if (k.human && k.remote) {
+        const m = netInput && netInput[k.id];
+        if (m) applyInput(k, m);
+      } else if (k.human && controllers[k.id]) {
         const it = controllers[k.id].intent();
         k.input.throttle = it.throttle; k.input.steer = it.steer; k.input.drift = it.drift; k.input.use = it.use;
       } else if (k.ai) {
@@ -254,6 +412,10 @@ function boot() {
       // GO is drawn by hud.update's countdown path (it owns 3-2-1-GO now); only the perfect-start
       // input read stays here.
       for (let i = 0; i < karts.length; i++) if (karts[i].human && controllers[karts[i].id]) controllers[karts[i].id].intent();
+    }
+    if (net.mode === 'host' && net.conn && net.conn.open) {
+      snapAcc += dt;
+      if (snapAcc >= 0.05) { snapAcc = 0; try { net.conn.send(packSnap(race, karts, items)); } catch { /* dropped */ } }
     }
     // Show the scoreboard when the PLAYER crosses, not when the last AI trickles in: the wait
     // made them circle a dead map for up to 60 s. It then live-refreshes once a second until
@@ -310,7 +472,9 @@ function boot() {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     frames++; fpsT += dt; if (fpsT > 1) { fps = frames / fpsT; frames = 0; fpsT = 0; window.__stats.fps = Math.round(fps); }
 
-    if (started && !paused) {
+    if (started && !paused && net.mode === 'client') {
+      clientTick(dt, now);
+    } else if (started && !paused) {
       acc += dt;
       let guard = 0;
       while (acc >= GAME.fixedStep && guard < GAME.maxSteps) { fixedStep(GAME.fixedStep); acc -= GAME.fixedStep; guard++; }
@@ -388,6 +552,7 @@ function boot() {
   window.addEventListener('keydown', (e) => {
     // a focused menu button owns its own Enter/arrows (the menu module handles activation)
     if (e.target && e.target.closest && e.target.closest('.kc-btn')) return;
+    if (e.target && e.target.tagName === 'INPUT') return;   // typing a room code is not gameplay
     // after the flag, Esc/Enter goes back to the title screen (it used to do nothing at all)
     if (started && race.phase === 'finished' && (e.code === 'Escape' || e.code === 'Enter')) { toTitle(); return; }
     if (started && race.phase !== 'finished' && GLOBAL_KEYS.pause.includes(e.code)) { setPaused(!paused); return; }
@@ -416,7 +581,24 @@ function boot() {
     else if (a === 'restart') { if (started) { race.start(); hud.hideResults(); setPaused(false); } }   // pause-menu Restart Race: restart AND resume (no-op at the title, 2026-11-09)
     else if (a === 'resume') { setPaused(false); }
     else if (a === 'quit') { toTitle(); }
-    else if (a === 'switch' || a === 'next') { trackIdx = (trackIdx + 1) % TRACKS.length; buildWorld(); race.start(); hud.setHidden(true); menu.showTitle(menuInfo()); }
+    else if (a === 'switch' || a === 'next') { trackIdx = (trackIdx + 1) % TRACKS.length; if (net.mode === 'client') return; buildWorld(); race.start(); hud.setHidden(true); menu.showTitle(menuInfo()); }
+    else if (a === 'host') { if (net.mode === 'solo') hostRoom(); }
+    else if (a === 'join') { if (net.mode === 'solo') joinRoom(); }
+    else if (a === 'leave') { leaveRoom(); }
+    else if (a === 'bots') {
+      if (net.mode !== 'host') return;
+      net.bots = net.bots ? 0 : RACE.aiField;
+      if (!started) { buildWorld(); }   // the preview field changes with the setting
+      menu.showTitle(menuInfo());
+    }
+    else if (a === 'roomstart') {
+      if (net.mode !== 'host' || started) return;
+      humanCount = net.conn ? 2 : 1;
+      netInput = {};
+      buildWorld();
+      startRace();
+      sendRoom(cfgMsg());
+    }
   });
   menu.showTitle(menuInfo());
   // the corner stamp exists so a player and I can agree on which build they are looking at

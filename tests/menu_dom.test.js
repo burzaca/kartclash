@@ -80,3 +80,24 @@ test('the pause screen repeats the keys and offers a way back to the title', () 
   assert.ok(actions.includes('resume'), 'cannot resume');
   assert.ok(actions.includes('quit'), 'cannot get back to the title');
 });
+
+test('title screen offers the ROOM flow and the code gate', () => {
+  const { root, m } = menu();
+  m.showTitle({ ...info, room: { mode: 'solo', code: '', note: '', guest: '', bots: 4, racers: 0 } });
+  const inp = byClass(root, 'kc-code-input');
+  assert.equal(inp.length, 1, 'solo title must show a room-code input');
+  const acts = [...root.querySelectorAll('.kc-btn')].map((b) => b.dataset.action);
+  assert.ok(acts.includes('host') && acts.includes('join'), 'host/join buttons missing');
+  assert.ok(text(root).includes('4-letter code'), 'the invite-pass rule must be explained');
+
+  m.showTitle({ ...info, room: { mode: 'host', code: 'K7QF', note: '', guest: 'RIVAL', bots: 4, racers: 6 } });
+  assert.ok(text(root).includes('K7QF'), 'host panel must show the room code (the pass)');
+  assert.ok(text(root).includes('RIVAL'), 'host panel must show who joined');
+  const acts2 = [...root.querySelectorAll('.kc-btn')].map((b) => b.dataset.action);
+  assert.ok(acts2.includes('bots') && acts2.includes('roomstart') && acts2.includes('leave'), 'host controls missing');
+
+  m.showTitle({ ...info, room: { mode: 'client', code: 'K7QF', note: 'waiting for the host to start...', guest: '', bots: 0, racers: 0 } });
+  const acts3 = [...root.querySelectorAll('.kc-btn')].map((b) => b.dataset.action);
+  assert.ok(!acts3.includes('roomstart'), 'only the host may start a room race');
+  assert.ok(!acts3.includes('host') && !acts3.includes('join'), 'a joined guest must not re-host/re-join');
+});

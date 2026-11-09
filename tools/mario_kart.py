@@ -124,6 +124,7 @@ def join(objs, name):
 # scale/rotation, Blender's join leaves the active object's TRS on the merged mesh and
 # the GLB node inherits it — the kart exported broken (garbage bounding boxes, 2026-11-09).
 bpy.ops.object.select_all(action='DESELECT')
+groups['paint'].append(backr)   # backrest belongs to the body (seat group top = driver seat height)
 _meshes = [o for o in bpy.data.objects if o.type == 'MESH']
 for o in _meshes: o.select_set(True)
 bpy.context.view_layer.objects.active = _meshes[0]
@@ -132,19 +133,12 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 paint_o = join(groups['paint'], 'Kart_body')
 steel_o = join(groups['steel'], 'Kart_trim')
 dark_o  = join(groups['dark'],  'Kart_chassis')
-# backrest goes in the BODY group: the game seats the driver on the seat group's bbox
-# top, and a joined backrest put him on top of it (2026-11-09 camera probe: kart 43% of frame)
-groups['paint'].append(backr)
 seat_o  = join([groups['seat'][0]], 'Kart_seat')
 front_o = join(front_parts, 'Kart_wheels_front')
 back_o  = join(back_parts,  'Kart_wheels_back')
 
-# centre X/Z on the body axis and rest the wheels on y=0
-for o in bpy.data.objects:
-    if o.type == 'MESH': o.location.z += 0.0
-# ground the kart: lowest wheel vertex to y=0
 bpy.ops.object.select_all(action='DESELECT')
-bpy.ops.export_scene.gltf(filepath='/tmp/mario-kart.glb', export_format='GLB', export_apply=True, export_yup=True)
+bpy.ops.export_scene.gltf(filepath='/tmp/mario-kart.glb', export_format='GLB', export_apply=True, export_yup=False)
 print('EXPORTED /tmp/mario-kart.glb')
 for o in bpy.data.objects:
     if o.type == 'MESH':

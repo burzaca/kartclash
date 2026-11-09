@@ -206,24 +206,20 @@ test('no steering when stopped; airborne steering is reduced to KART.airSteer', 
 });
 
 // ------------------------------------------------------------------ drift chain
-test('drift start hops once, then lands', () => {
+test('regression 2026-11-09: holding drift latches without steering, survives a centered wheel, and never hops', () => {
   const k = newKart(), tr = fakeTrack();
   drive(k, tr, 2, { throttle: 1 });
-  k.input.drift = true; k.input.steer = -1;
+  k.input.drift = true;                       // straight: no steer at all
   stepKart(k, tr, DT, {});
-  assert.ok(k.drift.on && k.drift.dir === -1);
-  assert.ok(!k.air.onGround && k.air.y > 0);
-  let landed = -1, hops = 0, wasGround = false;
-  for (let i = 0; i < 1 / DT; i++) {
-    stepKart(k, tr, DT, {});
-    if (k.air.onGround && landed < 0) landed = i * DT;
-    if (wasGround && !k.air.onGround) hops++;
-    wasGround = k.air.onGround;
-  }
-  const flight = 2 * KART.driftHopImpulse / KART.hopGravity;
-  assert.ok(Math.abs(landed - flight) < 0.03, `landed ${landed} vs ${flight}`);
-  assert.equal(hops, 0, 'only one hop per drift');
-  assert.ok(k.drift.on);
+  assert.ok(k.drift.on && k.drift.dir === 0, 'drift must latch on a straight');
+  assert.ok(k.air.onGround && k.air.y === 0, 'drift must not launch the kart (the model "glitched into the ground")');
+  k.input.steer = 1; stepKart(k, tr, DT, {});   // then steer
+  assert.equal(k.drift.dir, 0);               // dir stays as latched (straight), steering passes through
+  k.input.steer = 0;                          // center the wheel mid-drift
+  for (let i = 0; i < 10; i++) stepKart(k, tr, DT, {});
+  assert.ok(k.drift.on, 'a centered wheel must not cancel the drift');
+  k.input.drift = false; stepKart(k, tr, DT, {});   // releasing still ends it
+  assert.ok(!k.drift.on);
 });
 
 test('drift for 1.2 s reaches tier >= 0 and releasing sets boost.time > 0', () => {
@@ -258,11 +254,11 @@ test('tier timing follows KART.driftCharge exactly; tier 2 needs >= driftCharge[
   assert.deepEqual(seen.map((s) => s.tier), [-1, 0, 1, 2]);
   for (let i = 0; i < 3; i++) assert.ok(Math.abs(seen[i + 1].t - KART.driftCharge[i]) <= DT + 1e-9);
   assert.ok(k.speed > 15, `drift keeps its speed: ${k.speed}`);
-  drive(k, tr, DT, { throttle: 1, steer: 0, drift: true });     // releasing the steer also fires
+  drive(k, tr, DT, { throttle: 1, steer: 1, drift: false });    // releasing the DRIFT key fires (centering the wheel does not, 2026-11-09)
   assert.equal(k.boost.mul, KART.driftBoost[2]);
 });
 
-test('drift released before driftCharge[0] gives no boost; no drift without speed or steer', () => {
+test('drift released before driftCharge[0] gives no boost; no drift below speed; straight drift allowed (2026-11-09)', () => {
   const tr = fakeTrack();
   const k = newKart();
   drive(k, tr, 2, { throttle: 1 });
@@ -275,7 +271,7 @@ test('drift released before driftCharge[0] gives no boost; no drift without spee
   const straight = newKart();
   drive(straight, tr, 2, { throttle: 1 });
   drive(straight, tr, 0.5, { throttle: 1, steer: 0, drift: true });
-  assert.equal(straight.drift.on, false);
+  assert.equal(straight.drift.on, true, 'holding drift on a straight must charge a mini-turbo');
 });
 
 test('drifting grip slides more than normal grip', () => {

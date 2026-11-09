@@ -230,12 +230,8 @@ export function createMenu(root, opts) {
     btnSwitch.textContent = 'Switch Track';
     btnSwitch.dataset.action = 'switch';
     btnGrp.appendChild(btnSwitch);
-
-    const btnRestart = document.createElement('button');
-    btnRestart.className = 'kc-btn';
-    btnRestart.textContent = 'Restart';
-    btnRestart.dataset.action = 'restart';
-    btnGrp.appendChild(btnRestart);
+    // no Restart button here: at the title there is no race to restart — it sat dead
+    // (a "Restart does nothing" report, 2026-11-09). The pause menu carries it instead.
 
     menuRoot.appendChild(btnGrp);
 
@@ -277,6 +273,14 @@ export function createMenu(root, opts) {
     resumeBtn.textContent = 'Resume';
     resumeBtn.dataset.action = 'resume';
     overlay.appendChild(resumeBtn);
+
+    // Restart lives here now (a live race exists to restart); it used to sit on the title
+    // where it did nothing at all (2026-11-09).
+    const restartBtn = document.createElement('button');
+    restartBtn.className = 'kc-btn';
+    restartBtn.textContent = 'Restart Race';
+    restartBtn.dataset.action = 'restart';
+    overlay.appendChild(restartBtn);
 
     const quitBtn = document.createElement('button');
     quitBtn.className = 'kc-btn';
@@ -399,8 +403,9 @@ export function createMenu(root, opts) {
           if (btn) {
             const action = btn.dataset.action;
             cb(action);
-            // after action we return to title (or keep current mode)
-            if (action === 'start' || action === 'resume' || action === 'quit') {
+            // 'quit' must NOT hide here: the app's quit handler redraws the title, and hiding
+            // after it left players on a bare world with no menu (2026-11-09).
+            if (action === 'start' || action === 'resume') {
               menu.hide();
             }
           }
@@ -421,7 +426,8 @@ export function createMenu(root, opts) {
         if (!btn) return;
         const action = btn.dataset.action;
         cb(action);
-        if (action === 'start' || action === 'resume' || action === 'quit') menu.hide();
+        // see the keydown handler: 'quit' redraws the title itself; hiding afterwards = no menu
+        if (action === 'start' || action === 'resume') menu.hide();
       });
       // return a teardown function so the caller can clean up
       return () => document.removeEventListener('keydown', handler);

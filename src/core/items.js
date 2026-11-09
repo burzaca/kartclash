@@ -103,7 +103,10 @@ export function createItemSystem(track, rng) {
     const f = forward2(k.heading);
     const lead = KART.radius + ITEMS.shell.radius + 0.4;
     const x = k.pos.x + f.x * lead, z = k.pos.z + f.z * lead;
-    const e = makeEffect('shell', item, k.id, x, z, k.heading, ITEMS.shell.speed, ITEMS.shell.radius, ITEMS.shell.life);
+    // red is the STRONGER shell: faster than green (plus homing in stepShell). Same speed made
+    // the two feel identical ("no difference in power", 2026-11-09).
+    const spd = item === ITEM.RED_SHELL ? ITEMS.shell.speed * ITEMS.shell.redSpeedMul : ITEMS.shell.speed;
+    const e = makeEffect('shell', item, k.id, x, z, k.heading, spd, ITEMS.shell.radius, ITEMS.shell.life);
     e.idx = sample(x, z, typeof k.plIdx === 'number' ? k.plIdx : -1).idx;
     if (item === ITEM.RED_SHELL) e.homing = findRedTarget(k.pos.x, k.pos.z, idxOf(k), k.id, ctx && ctx.karts);
     callFx(ctx && ctx.fx, 'burst', x, e.pos.y, z, { color: item === ITEM.RED_SHELL ? 0xff3b30 : 0x34c759, count: 8, speed: 4, life: 0.3 });
@@ -277,11 +280,7 @@ export function createItemSystem(track, rng) {
     return true;
   }
 
-  // ------------------------------------------------------------ collect
-// Items that can be carried as a stack of up to three. The one-shot items (star, lightning,
-// cloud) are deliberately NOT in here — they are single-use by design.
-const STACKABLE_BASES = new Set([ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL, ITEM.BANANA]);
-
+    // ------------------------------------------------------------ collect
   function baseOf(id) { return ITEM_TRIPLE[id] !== undefined ? ITEM_TRIPLE[id] : id; }
 
   function collect(k, ctx) {
@@ -297,35 +296,23 @@ const STACKABLE_BASES = new Set([ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL
       // anything up" report). Compare like with like.
       if (dist2(b.x, b.z, k.pos.x, k.pos.z) > ITEMS.boxRadius * ITEMS.boxRadius) continue;
 
-      const held = k.item || ITEM.NONE;
-      const heldBase = baseOf(held);
-      const holding = held !== ITEM.NONE;
-      if (holding && !STACKABLE_BASES.has(heldBase)) {
-        // A one-shot item stays in hand until it is used, and the box is left alone so the
-        // player can come back for it. The caller gets a reason it can show.
+      // What is in hand gets USED first: a second box while holding anything used to draw a
+      // new item over the old one ("I held a powerup and got another without using it",
+      // 2026-11-09). The box stays untouched for the next pass. lastPick is set here too so
+      // driving through a box while blocked cannot spam the refusal.
+      if (k.item && k.item !== ITEM.NONE) {
+        kartState(k).lastPick = clock;
         if (typeof ctx?.onBlocked === 'function') ctx.onBlocked(k, b, 'busy');
         return 0;
       }
 
       const r = (ctx && ctx.rng) || rng;
       const id = rngWeighted(r, tableForPlace(k.place || 1, fieldSize(ctx)));
-      const base = baseOf(id);
-      if (holding && base === heldBase && (k.count | 0) >= 3) {
-        // stack already full: rolling the same item would consume the box and give
-        // NOTHING ("I went perfectly through one and it disappeared" report). Leave the
-        // box for someone else and tell the player why.
-        if (typeof ctx?.onBlocked === 'function') ctx.onBlocked(k, b, 'full');
-        return 0;
-      }
       b.active = false;
       b.respawnAt = clock + ITEMS.boxRespawn;
       kartState(k).lastPick = clock;
-      if (holding && base === heldBase && (k.count || 1) < 3) {
-        k.count = Math.min(3, (k.count || 1) + 1);
-      } else {
-        k.item = id;
-        k.count = ITEM_COUNT[id] || 1;
-      }
+      k.item = id;
+      k.count = ITEM_COUNT[id] || 1;
       callFx(ctx && ctx.fx, 'burst', b.x, b.y, b.z, { color: 0x6fd3ff, count: 14, speed: 5, life: 0.5 });
       return k.item;
     }

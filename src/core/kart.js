@@ -148,12 +148,15 @@ export function stepKart(kart, track, dt, ctx = {}) {
 
   // ---- 2. drift / mini-turbo chain
   if (d.on) {
-    if (!driftHeld || steerDir === 0) endDrift(kart, true, fx);              // release -> boost for tier
+    if (!driftHeld) endDrift(kart, true, fx);                                  // release -> boost for tier
     else if (Math.abs(kart.speed) < DRIFT_KEEP_SPEED || kart.speed < 0) endDrift(kart, false, fx);
   }
-  if (!d.on && driftHeld && steerDir !== 0 && air.onGround && kart.speed >= DRIFT_MIN_SPEED) {
+  if (!d.on && driftHeld && air.onGround && kart.speed >= DRIFT_MIN_SPEED) {
+    // Holding the drift key latches a drift with or without steering. d.dir === 0 means a
+    // straight drift and steering passes through normally. It used to require steering to even
+    // start and died the moment the wheel centered ("shift does nothing"), and it punched the
+    // kart airborne, which read as the model sinking into the ground (2026-11-09) — no hop.
     d.on = true; d.dir = steerDir; d.time = 0; d.tier = -1;
-    air.vy = KART.driftHopImpulse; air.onGround = false;                      // the hop
   }
   if (d.on) {
     const before = d.tier;
@@ -166,7 +169,7 @@ export function stepKart(kart, track, dt, ctx = {}) {
 
   // ---- 3. steering
   let steer = steerIn;
-  if (d.on) steer = d.dir * clamp(DRIFT_STEER_BASE + DRIFT_STEER_RANGE * steerIn * d.dir, DRIFT_STEER_MIN, 1);
+  if (d.on && d.dir !== 0) steer = d.dir * clamp(DRIFT_STEER_BASE + DRIFT_STEER_RANGE * steerIn * d.dir, DRIFT_STEER_MIN, 1);
   const dirSign = kart.speed < 0 ? -1 : 1;                                    // reverse steers mirrored
   const yawRate = steer * dirSign * KART.steerRate * steerFalloffFactor(kart.speed)
     * (d.on ? KART.driftTurnBoost : 1) * (air.onGround ? 1 : KART.airSteer);

@@ -135,24 +135,21 @@ test('collect: needs proximity, gives exactly one item, holder/finished cannot c
 
   items.update(ITEMS.pickGap + 0.01, ctx); // the earlier collect set the pickup gap
 
-  // Holding a stackable item must never leave the player running through boxes getting nothing
-  // (that was the report: "at some point I stopped being able to pickup at all"). A stackable in
-  // hand means the next box tops the stack up or replaces it.
+  // 2026-11-09 rule: whatever is in hand gets used first. A second box while holding anything
+  // is refused, the box stays untouched, and the caller is told why. (Replaces the old
+  // top-up/replace behaviour that let players end up with a new powerup unused.)
   const nb = items.boxes[3]; k.pos.x = nb.x; k.pos.z = nb.z;
   k.item = ITEM.MUSHROOM; k.count = 1;
-  const again = items.collect(k, ctx);
-  assert.notEqual(again, 0, 'a box did nothing while a stackable item was held');
-  assert.ok(nb.active === false, 'the box was not consumed');
-  assert.ok(k.count >= 1 && k.count <= 3, `stack count ${k.count} is out of range`);
-
-  // A one-shot item is kept until it is used, and the caller is told why nothing happened.
-  items.update(ITEMS.pickGap + 0.01, ctx);
-  k.item = ITEM.STAR; k.count = 1;
-  const nb2 = items.boxes[4]; k.pos.x = nb2.x; k.pos.z = nb2.z;
   let blocked = null;
-  assert.equal(items.collect(k, { karts: [k], onBlocked: (kk, box, why) => { blocked = { id: kk.id, why }; } }), 0);
-  assert.equal(nb2.active, true, 'a box was consumed even though the player is holding a star');
+  assert.equal(items.collect(k, { ...ctx, onBlocked: (kk, box, why) => { blocked = { id: kk.id, why }; } }), 0,
+    'a second item must not appear while one is held');
+  assert.equal(nb.active, true, 'the box must stay for the next pass');
   assert.deepEqual(blocked, { id: 0, why: 'busy' }, 'the caller was not told why the box did nothing');
+
+  // empty the hand by using it, and boxes work again
+  assert.ok(items.use(k, ctx), 'using the held mushroom failed');
+  items.update(ITEMS.pickGap + 0.01, ctx);
+  assert.notEqual(items.collect(k, ctx), 0, 'with an empty hand boxes work again');
 
   // finished kart never collects
   const f = makeTestKart(1, { finished: true }); f.pos.x = nb.x; f.pos.z = nb.z;
@@ -488,20 +485,20 @@ test('regression 2026-11-08: a near-centered pass at 1.7 m must collect (was a s
   assert.notEqual(items.collect(k, ctx), 0, '1.7 m from an empty-handed kart must be inside the 1.9 m pickup radius');
 });
 
-test('regression 2026-11-08b: full stack of the same item must NOT consume the box (was: box vanished, player got nothing)', () => {
+test('regression 2026-11-09: the RED shell is the stronger shell — measurably faster than a green one (both spawned at 42 m/s)', () => {
   const track = makeLoopTrack();
   const items = createItemSystem(track, mulberry32(3));
-  const k = place(track, makeTestKart(0), 30);
-  k.place = 1;
-  k.item = ITEM.MUSHROOM; k.count = 3;           // full mushroom stack
-  let reason = null;
-  const ctx = { karts: [k], rng: () => 0 };       // rng 0 => first weighted entry of the place-1 table (mushroom)
-  const b = items.boxes[2];
-  k.pos.x = b.x; k.pos.z = b.z;
-  const got = items.collect(k, { ...ctx, onBlocked: (_k, _b, why) => { reason = why; } });
-  assert.equal(got, 0, 'a full same-item stack must not draw from the box');
-  assert.equal(b.active, true, 'the box must stay for the next racer');
-  assert.equal(reason, 'full');
+  const speedOf = (item) => {
+    const k = place(track, makeTestKart(item), item);
+    k.item = item; k.count = 1;
+    assert.ok(items.use(k, { karts: [k] }), 'the shell was not used');
+    const e = items.effects.find((x) => x.item === item);
+    assert.ok(e, 'no shell effect was spawned');
+    return Math.hypot(e.vel.x, e.vel.z);
+  };
+  const green = speedOf(ITEM.GREEN_SHELL);
+  const red = speedOf(ITEM.RED_SHELL);
+  assert.ok(red > green * 1.2, `red ${red} m/s vs green ${green} m/s — red must be clearly stronger`);
 });
 
 test('regression 2026-11-08c: a 3-box cluster must not be machine-gunned — second pickup needs pickGap', () => {
@@ -516,5 +513,6 @@ test('regression 2026-11-08c: a 3-box cluster must not be machine-gunned — sec
   assert.equal(items.collect(k, ctx), 0, 'inside pickGap no second box may be taken');
   assert.equal(b2.active, true, 'the second box stays for whoever comes later');
   items.update(ITEMS.pickGap + 0.1, ctx);         // wait out the gap
-  assert.notEqual(items.collect(k, ctx), 0, 'after the gap it works again');
+  k.item = 0; k.count = 0;                        // and use up what was in hand (2026-11-09: holding blocks regardless of the gap)
+  assert.notEqual(items.collect(k, ctx), 0, 'after the gap, with an empty hand, it works again');
 });

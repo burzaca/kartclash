@@ -27,7 +27,7 @@ function resetBook(k, track) {
   k.wallHit = 9; k.hitFlash = 0; k.fx.shake = 0; k.fx.boost = 0; k.fx.spark = -1;
   k.lean = 0; k.wheelSpin = 0; k.steerVis = 0;
   book.set(k, {
-    sawMid: true,            // the grid sits just before the line, so the first crossing is legal
+    sawMid: false,           // grid slots are AFTER the line (frac ~0.09), so a real lap always passes the mid marker before the first crossing. It used to start TRUE, which let a kart bumped backwards over the seam at the start bank a free lap (a "2/3" badge at 14 s into the race, 2026-11-09).
     offRoadT: 0, stuckT: 0, wrongWayT: 0, lastIdx: k.plIdx, travelled: 0,
     perfectWindow: 0,
   });
@@ -142,14 +142,15 @@ export function createRace(track, karts) {
 
       rank(race);
 
-      // The race is over for the humans when they have all taken the flag; everyone still
-      // out there is projected across the line so the standings show real times.
-      const humans = karts.filter((k) => k.human);
-      const humansDone = humans.length > 0 && humans.every((k) => k.finished);
+      // The race is over a fixed time after the FIRST finisher, whoever that is. It used to
+      // require every human to have finished first (grace = humansDone && …) — one lost human
+      // and the race literally never ended ("the race does not finish after the 3 laps…
+      // the AI all bunched in one spot going round and round", 2026-11-09). Anyone still out
+      // there is projected across the line so the standings keep real times.
       const allDone = karts.every((k) => k.finished);
-      const firstHuman = humans.reduce((m, k) => Math.min(m, k.finishTime || Infinity), Infinity);
-      const grace = humansDone && race.clock - firstHuman > 45;
-      if (race.phase === 'racing' && (allDone || (humansDone && grace))) {
+      const firstFinish = karts.reduce((m, k) => Math.min(m, k.finishTime || Infinity), Infinity);
+      const grace = Number.isFinite(firstFinish) && race.clock - firstFinish > 60;
+      if (race.phase === 'racing' && (allDone || grace)) {
         for (const k of karts) {
           if (k.finished) continue;
           const remain = (race.totalLaps - k.lap) * track.pl.total + (1 - k.progress) * track.pl.total;
@@ -211,7 +212,10 @@ export function standings(race) {
     }
     return {
       id: k.id, name: k.name, spec: k.spec, place: k.place,
-      lap: Math.min(k.lap + 1, race.totalLaps), laps: race.totalLaps,
+      // completed laps, per the HUD contract (hud.update adds the +1 for the "lap you are on"
+      // display). It used to pre-add it here, so the badge showed the current lap +2: a fresh
+      // kart read 2/3 and any lap made it stick at 3/3 forever ("laps always say 3/3", 2026-11-09).
+      lap: k.lap, laps: race.totalLaps,
       finished: k.finished, time: k.finishTime, gap, bestLap: k.bestLap, lapTimes: k.lapTimes,
       speed: k.speed, item: k.item, count: k.count, star: k.star, invisible: k.invisible,
       shrunk: k.shrunk, spin: k.spin, offRoad: k.offRoad, boost: k.boost.time, isPlayer: k.human,

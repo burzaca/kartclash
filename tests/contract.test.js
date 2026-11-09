@@ -224,6 +224,57 @@ test('race contract: AI-driven race reaches the flag with real lap times', () =>
   assert.ok(rows[0].lapTimes[0] === rows[0].bestLap || rows[0].bestLap <= rows[0].lapTimes[0], 'best lap not tracked');
 });
 
+test('regression 2026-11-09: one kart that never takes the flag must NOT make the race endless', () => {
+  const track = buildTrack({ ...TRACKS[0], laps: 2 });
+  const rng = mulberry32(5);
+  const karts = [createKart(0, PLAYERS[0], false), createKart(1, PLAYERS[1], false)];
+  karts.forEach((k, i) => { k.ai = createAI(k.spec, mulberry32(97 + i * 31)); });
+  const items = createItemSystem(track, rng);
+  const race = createRace(track, karts);
+  race.start();
+  const ctx = { karts, track, items, fx: null, rng, time: 0 };
+  let steps = 0, firstFinish = null;
+  while (race.phase !== 'finished' && steps < 120 * 60 * 6) {
+    for (const k of karts) {
+      if (!k.frozen) stepAI(k, k.ai, track, ctx, 1 / 120);
+      stepKart(k, track, 1 / 120, ctx);
+    }
+    resolveKartCollisions(karts);
+    items.update(1 / 120, ctx);
+    for (const k of karts) if (k.input.use) { items.use(k, ctx); k.input.use = false; }
+    items.applyHits(ctx);
+    race.step(1 / 120, ctx);
+    if (firstFinish === null && karts.some((k) => k.finished)) firstFinish = race.clock;
+    // the second kart is dead in the water from the flag on: it will never cross again
+    if (firstFinish !== null) for (const k of karts) if (!k.finished) {
+      k.frozen = true; k.speed = 0; k.vel.x = 0; k.vel.z = 0; k.input.throttle = 0;
+    }
+    steps++;
+  }
+  assert.equal(race.phase, 'finished', `the race never ended (steps=${steps})`);
+  assert.ok(race.clock - firstFinish <= 61, `ended ${race.clock - firstFinish} s after the first finisher — grace must cap at 60`);
+  assert.ok(standings(race).every((r) => r.finished), 'unfinished karts must be projected across the line');
+});
+
+test('regression 2026-11-09: rocking backwards over the start line at the start banks no free lap', () => {
+  const track = buildTrack({ ...TRACKS[0], laps: 2 });
+  const k = createKart(0, PLAYERS[0], false);
+  const race = createRace(track, [k]);
+  race.start();
+  race.phase = 'racing';
+  const pl = track.pl;
+  const ctx = { karts: [k], track, items: null, fx: null, time: 0 };
+  // bumped backwards to just before the line (the start-line pile-up pushed it back over the seam)
+  const back = pl.pts[pl.count - 4];
+  k.pos.x = back.x; k.pos.z = back.z;
+  race.step(1 / 120, ctx);
+  // then it drives forward across the line again — sawMid was never earned, so no lap
+  const fwd = pl.pts[4];
+  k.pos.x = fwd.x; k.pos.z = fwd.z;
+  race.step(1 / 120, ctx);
+  assert.equal(k.lap, 0, 'a free lap was banked without ever passing the mid-lap marker');
+});
+
 // --- vendor integrity -------------------------------------------------------
 test('the vendored three.js build is present, complete, and loads with the APIs we use', async () => {
   const fs = await import('node:fs');

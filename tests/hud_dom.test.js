@@ -127,3 +127,45 @@ test('the countdown banner no longer overwrites the position badge', () => {
   assert.equal(banners[0].textContent, '3');
   assert.ok(!badges[0].textContent.includes('3'), 'the countdown was written into the position badge again');
 });
+
+test('regression 2026-11-09: the lap badge shows the lap you are ON — never double-counted', () => {
+  // standings() pre-added +1 and hud.update added it again, so a fresh kart read 2/3 and any
+  // finished lap stuck the badge at 3/3 forever ("the laps always say 3/3").
+  const { root, hud } = makeHUD(1280, 720);
+  const lapEls = byClass(root, 'kc-lap');
+  hud.update(view(kartRow(0, 0, {}), kartRow(1, 1, {})));
+  assert.equal(lapEls[0].textContent, '1/3', 'a fresh kart must read 1/3');
+  hud.update(view(kartRow(0, 0, { lap: 1 }), kartRow(1, 1, {})));
+  assert.equal(lapEls[0].textContent, '2/3');
+  assert.equal(lapEls[1].textContent, '1/3', 'each pane shows its OWN driver');
+  hud.update(view(kartRow(0, 0, { lap: 2 }), kartRow(1, 1, { lap: 2 })));
+  assert.equal(lapEls[0].textContent, '3/3', 'the final lap must still read 3/3');
+});
+
+test('regression 2026-11-09: the 3-2-1-GO countdown is actually drawn', () => {
+  // hud.update received countdownText every frame and ignored it; only the GO transition banner
+  // was ever visible ("the timer counting down doesn't show. Only the GO is visible").
+  const { root, hud } = makeHUD(1280, 720);
+  const banners = byClass(root, 'kc-banner');
+  const badges = byClass(root, 'kc-badge');
+  const v = view(kartRow(0, 0, {}), kartRow(1, 1, {}));
+  for (const text of ['3', '2', '1', 'GO']) {
+    v.countdownText = text;
+    hud.update(v);
+    assert.equal(banners[0].textContent, text, `countdown '${text}' never reached the centre overlay`);
+    assert.ok(banners[0].classList.contains('show'), `countdown '${text}' not displayed`);
+  }
+  v.countdownText = null;
+  hud.update(v);
+  assert.ok(!banners[0].classList.contains('show'), 'the countdown banner was never cleared');
+  assert.ok(!badges[0].textContent.includes('GO'), 'the countdown leaked into the position badge');
+});
+
+test('regression 2026-11-09: pausing hides the HUD (its panels sat behind the pause menu)', () => {
+  const { root, hud } = makeHUD(1280, 720);
+  const hudRoot = byClass(root, 'kc-hud')[0];
+  hud.setHidden(true);
+  assert.equal(hudRoot.style.display, 'none');
+  hud.setHidden(false);
+  assert.equal(hudRoot.style.display, '');
+});

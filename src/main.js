@@ -141,16 +141,26 @@ function boot() {
   function toTitle() {
     // the pause menu offers "Quit to Title"; it had no handler, so the option did nothing
     started = false; paused = false;
-    hud.hideResults();
-    race.start();
-    buildWorld();
+    hud.setHidden(true);            // the title is the menu, not a frozen race readout (2026-11-09)
+    buildWorld();                   // fresh track + karts FIRST…
+    hud.setHidden(true);            // …buildWorld made a new HUD; it stays hidden until a race
+    race.start();                   // …then grid-place the NEW karts: the title shows the start
+    hud.hideResults();              // grid, not a field at world origin ("green land", 2026-11-09)
     menu.showTitle(menuInfo());
   }
   function startRace() {
     started = true; paused = false;
+    hud.setHidden(false);
     menu.hide();
     race.start();
     hud.hideResults();
+  }
+  // Pause is one operation, not four flags: the HUD must go with it (its panels covered the
+  // pause menu's buttons, player report 2026-11-09) and a frozen race needs no race data.
+  function setPaused(v) {
+    paused = v;
+    hud.setHidden(v);
+    if (v) menu.showPause(menuInfo()); else menu.hidePause();
   }
 
   // Replace any procedural fallback kart groups with the real GLB karts, keeping game state intact.
@@ -204,8 +214,7 @@ function boot() {
         const nowT = race ? race.clock : 0;
         if (!toldHolding.has(k.id) || nowT - (blockedAt.get(k.id) ?? -9) > 3.5) {
           toldHolding.add(k.id); blockedAt.set(k.id, nowT);
-          hud.banner(why === 'full' ? 'ITEM STACK FULL' : 'ITEM ALREADY IN HAND',
-            why === 'full' ? 'use some first' : `use it first: press ${useKeyLabel(k)}`, 1800, pane, true);
+          hud.banner('ITEM ALREADY IN HAND', `use it first: press ${useKeyLabel(k)}`, 1800, pane, true);
         }
       },
     };
@@ -242,7 +251,8 @@ function boot() {
     const wasPhase = race.phase;
     race.step(dt, ctx);
     if (wasPhase === 'countdown' && race.phase === 'racing') {
-      hud.banner(countdownText() === 'GO' ? 'GO' : '', '', 700);
+      // GO is drawn by hud.update's countdown path (it owns 3-2-1-GO now); only the perfect-start
+      // input read stays here.
       for (let i = 0; i < karts.length; i++) if (karts[i].human && controllers[karts[i].id]) controllers[karts[i].id].intent();
     }
     if (race.phase === 'finished' && !race._shown) {
@@ -375,8 +385,8 @@ function boot() {
     if (e.target && e.target.closest && e.target.closest('.kc-btn')) return;
     // after the flag, Esc/Enter goes back to the title screen (it used to do nothing at all)
     if (started && race.phase === 'finished' && (e.code === 'Escape' || e.code === 'Enter')) { toTitle(); return; }
-    if (started && race.phase !== 'finished' && GLOBAL_KEYS.pause.includes(e.code)) { paused = !paused; if (paused) menu.showPause(menuInfo()); else menu.hidePause(); return; }
-    if (GLOBAL_KEYS.restart.includes(e.code)) { if (started) { race.start(); hud.hideResults(); } return; }
+    if (started && race.phase !== 'finished' && GLOBAL_KEYS.pause.includes(e.code)) { setPaused(!paused); return; }
+    if (GLOBAL_KEYS.restart.includes(e.code)) { if (started) { race.start(); hud.hideResults(); } return; }   // R from a live race (pause stays paused: Resume resumes it)
     if (started && race.phase === 'finished' && e.code === 'Enter') { race.start(); hud.hideResults(); return; }
     if (!started && e.code === 'Enter') { startRace(); return; }
     const camFor = (CAM.camKeys || {})[e.code];
@@ -394,13 +404,14 @@ function boot() {
 
   buildWorld();
   menu = createMenu(uiRoot, {});
+  hud.setHidden(true);   // title screen = menu only (the HUD belongs to a live race)
   menu.onAction((a) => {
     if (a === 'start') { humanCount = 2; buildWorld(); startRace(); }
     else if (a === 'p1only') { humanCount = 1; buildWorld(); startRace(); }
-    else if (a === 'restart') { race.start(); hud.hideResults(); }
-    else if (a === 'resume') { paused = false; menu.hidePause(); }
+    else if (a === 'restart') { if (started) { race.start(); hud.hideResults(); setPaused(false); } }   // pause-menu Restart Race: restart AND resume (no-op at the title, 2026-11-09)
+    else if (a === 'resume') { setPaused(false); }
     else if (a === 'quit') { toTitle(); }
-    else if (a === 'switch' || a === 'next') { trackIdx = (trackIdx + 1) % TRACKS.length; buildWorld(); menu.showTitle(menuInfo()); }
+    else if (a === 'switch' || a === 'next') { trackIdx = (trackIdx + 1) % TRACKS.length; buildWorld(); race.start(); hud.setHidden(true); menu.showTitle(menuInfo()); }
   });
   menu.showTitle(menuInfo());
   // the corner stamp exists so a player and I can agree on which build they are looking at

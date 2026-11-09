@@ -695,14 +695,17 @@ export function buildItemProps(THREE) {
 
       switch (effect.kind) {
         case 'shell': {
-          // a green shell, not a green ball: domed body, belt, and the spikes that make it read
+          // a green shell, not a green ball: domed body, belt, and the spikes that make it read.
+          // The RED shell used to draw green too — the thrown shell ignored effect.item entirely
+          // ("the red shell is green", 2026-11-09). 5 = ITEM.RED_SHELL (same literal as itemMesh above).
+          const isRed = effect.item === 5;
           const shell = new THREE.Mesh(new THREE.SphereGeometry(effect.radius, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62),
-            new THREE.MeshStandardMaterial({ color: 0x2ecf3f, roughness: 0.35, metalness: 0.3, side: THREE.DoubleSide }));
+            new THREE.MeshStandardMaterial({ color: isRed ? 0xd8232a : 0x2ecf3f, roughness: 0.35, metalness: 0.3, side: THREE.DoubleSide }));
           shell.rotation.x = Math.PI;              // dome opens downward
           shell.castShadow = true; shell.receiveShadow = true;
           group.add(shell);
           const cap = new THREE.Mesh(new THREE.SphereGeometry(effect.radius * 0.98, 20, 8, 0, Math.PI * 2, Math.PI * 0.62, Math.PI * 0.38),
-            new THREE.MeshStandardMaterial({ color: 0x1b7a26, roughness: 0.5 }));
+            new THREE.MeshStandardMaterial({ color: isRed ? 0x8c1017 : 0x1b7a26, roughness: 0.5 }));
           cap.rotation.x = Math.PI;
           group.add(cap);
           const belt = new THREE.Mesh(new THREE.TorusGeometry(effect.radius * 0.96, effect.radius * 0.10, 8, 20),

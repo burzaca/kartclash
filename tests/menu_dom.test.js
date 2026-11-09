@@ -58,7 +58,7 @@ test('the title offers the modes that exist, and each button says which action i
   assert.ok(actions.includes('start'), 'no 2-player start');
   assert.ok(actions.includes('p1only'), 'no single-player start');
   assert.ok(actions.includes('switch') || actions.includes('next'), 'no way to change track');
-  assert.ok(actions.includes('restart'), 'no restart');
+  assert.ok(!actions.includes('restart'), 'the title must not offer a dead Restart (no live race)');
 });
 
 test('the menu scale is actually set (its stylesheet sizes everything from it)', () => {

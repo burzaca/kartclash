@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-08.10',
+  build: '2026-11-09.1',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,
@@ -71,7 +71,7 @@ export const ITEMS = {
                              // each silently replacing the last — "the 2 adjacent ones disappeared")
   boxCount: 5,               // boxes across the road at each node
   itemGap: 0.55,             // s cooldown between uses
-  shell: { speed: 42, life: 7.0, radius: 1.1, bounce: 0.9, wallBounceLife: 1.5 },
+  shell: { speed: 42, redSpeedMul: 1.35, life: 7.0, radius: 1.1, bounce: 0.9, wallBounceLife: 1.5 },
   redHomingRadius: 60, redTurnRate: 2.6,
   banana: { life: 26, radius: 1.3, dropBack: 6.0 },
   cloud: { invisTime: 6.0 },
@@ -94,7 +94,6 @@ export const KART = {
   grip: 7.5,                  // velocity->heading convergence (higher = more planted)
   driftGrip: 2.4,             // grip while drifting (slide)
   driftTurnBoost: 1.55,       // steer multiplier while drifting
-  driftHopImpulse: 2.3,       // vertical hop on drift start
   hopGravity: 26.0,
   driftCharge: [1.0, 2.0, 3.4], // s of drifting to reach mini / super / ultra
   driftBoost: [1.18, 1.30, 1.45], // maxSpeed multipliers per tier
@@ -119,7 +118,7 @@ export const AI = {
   cornerSlowK: 0.62,          // how hard it slows for curvature (1 = never, 0 = always)
   errorRate: 0.7,             // how fast its aim error wanders
   skillBand: 0.055,           // per-driver speed skill spread (fraction)
-  rubber: { leaderBand: 0.90, tailBand: 1.12 }, // speed scale by position (catch-up)
+  rubber: { leaderBand: 1.00, tailBand: 1.06 }, // speed scale by position (mild catch-up; was 0.90/1.12 — the leader was handicapped and a player still cleared the whole field, 2026-11-09)
   itemUseChance: 0.55, itemUseCooldown: 2.5,
   avoidRadius: 9.0,
 };

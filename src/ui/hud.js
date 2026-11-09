@@ -142,6 +142,9 @@ export function createHUD(root, racerSpecs, opts) {
     // initial size - will be overridden by setViewport
     vp.style.left = '0px'; vp.style.top = '0px';
     vp.style.width = '50%'; vp.style.height = '100%';
+    // 1-player races never call setViewport(1) — an unpositioned pane would sit at (0,0)
+    // drawing fallback data: that was the "two timers in the top-left corner" report (2026-11-09).
+    if (i >= ((opts && opts.players) || 2)) vp.style.display = 'none';
     hudRoot.appendChild(vp);
     viewports.push(vp);
   }
@@ -419,6 +422,7 @@ export function createHUD(root, racerSpecs, opts) {
 
       // ----- per-viewport processing ---------------------------------
       for (let i = 0; i < 2; i++) {
+        if (viewports[i].style.display === 'none') continue;   // hidden pane = no data, no ghost HUD
         const vp = viewports[i];
         const el = vpElements[i];
         const k = karts.find(k => k.isPlayer && k.viewport && k.viewport.i === i) ||
@@ -525,6 +529,21 @@ export function createHUD(root, racerSpecs, opts) {
 
         // ---- status line -------------------------------------------------
         el.status.textContent = `phase:${phase} t:${view.time.toFixed(1)}s`;
+
+        // ---- countdown ---------------------------------------------------
+        // view.countdownText used to arrive and be ignored: only the 'GO' transition banner ever
+        // reached the screen, so 3-2-1 were invisible (player report, 2026-11-09). The model
+        // drives this centre overlay every frame now — it owns 'GO' too.
+        if (view.countdownText) {
+          el.banner.textContent = view.countdownText;
+          el.banner.style.fontSize = el._bannerBig;
+          el.banner.style.top = '22%';
+          el.banner.classList.add('show');
+          el._cdShown = true;
+        } else if (el._cdShown) {
+          el._cdShown = false;
+          el.banner.classList.remove('show');
+        }
       }
     },
 
@@ -610,6 +629,12 @@ export function createHUD(root, racerSpecs, opts) {
       el.itemBox.classList.add('pulse');
       clearTimeout(el._pulseT);
       el._pulseT = setTimeout(() => el.itemBox.classList.remove('pulse'), 600);
+    },
+
+    // setHidden(bool) - hide the whole HUD overlay (used while paused: the pause menu buttons
+    // were behind the HUD panels, and a frozen race needs no race data).
+    setHidden(hidden) {
+      hudRoot.style.display = hidden ? 'none' : '';
     },
 
     setStatus(text) {

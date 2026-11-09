@@ -61,7 +61,7 @@ export function stepAI(kart, ai, track, ctx, dt) {
   // ---- corner speed: v = sqrt(a_lat * R), capped by skill and rubber band ----
   const curv = curvatureAhead(track, kart.plIdx);
   const radius = 1 / Math.max(curv, 1e-4);
-  const aLat = 15.5 * ai.skill * rubber;
+  const aLat = 17.0 * ai.skill * rubber;   // 15.5 -> 17.0: the field was being cleared by a skilled player (2026-11-09)
   const vCorner = Math.sqrt(aLat * radius);
   const vMax = KART.maxSpeed * ai.skill * rubber;
 

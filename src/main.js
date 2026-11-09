@@ -12,7 +12,7 @@ import { createAI, stepAI } from './core/ai.js';
 import { createStage } from './render/stage.js';
 import { createCameraRig } from './render/cameraRig.js';
 import { buildTrackScene } from './render/trackMesh.js';
-import { buildKartModel, updateKartModel, buildItemProps, setHeldItem, loadKartModels, modelSource } from './render/kartModel.js';
+import { buildKartModel, updateKartModel, buildItemProps, loadKartModels, modelSource } from './render/kartModel.js';
 import { createFX } from './render/fx.js';
 import { createHUD } from './ui/hud.js';
 import { createMenu } from './ui/menu.js';
@@ -172,7 +172,6 @@ function boot() {
       scene.remove(models[i]);
       const g = buildKartModel(THREE, karts[i].spec, karts[i].id);
       scene.add(g); models[i] = g;
-      setHeldItem(THREE, g, karts[i].item, karts[i].count);
     }
     setStamp();   // honest model: after the async swap — a stamp frozen at boot always lied 'lathe' (2026-11-09)
   }
@@ -195,7 +194,6 @@ function boot() {
   // ("I keep getting the same pickup"). Pass ?seed=N to reproduce a session.
   const sessionRng = mulberry32(qs.get('seed') ? Number(qs.get('seed')) : ((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0));
   const taughtItemKey = new Set();     // humans who have been shown how to use an item, once
-  const toldHolding = new Set(); const blockedAt = new Map();
 
   // the player's own key, spelled out — "press SPACE", not "press the use key"
   function useKeyLabel(k) {
@@ -208,15 +206,9 @@ function boot() {
       karts, track, items, fx, rng: sessionRng, time: race ? race.clock : 0,
       onBlocked: (k, b, why) => {
         if (!k.human) return;
-        const pane = k.viewport ? k.viewport.i : 0;
-        hud.pulseItem(pane);
-        // first time explain it; afterwards keep a throttled reminder — a silent "cannot pick up"
-        // reads as a broken game (it was this player's report).
-        const nowT = race ? race.clock : 0;
-        if (!toldHolding.has(k.id) || nowT - (blockedAt.get(k.id) ?? -9) > 3.5) {
-          toldHolding.add(k.id); blockedAt.set(k.id, nowT);
-          hud.banner('ITEM ALREADY IN HAND', `use it first: press ${useKeyLabel(k)}`, 1800, pane, true);
-        }
+        // icon flash only — the full-screen 'ITEM ALREADY IN HAND' banner covered half the
+        // screen and the player asked for it gone (2026-11-09)
+        hud.pulseItem(k.viewport ? k.viewport.i : 0);
       },
     };
   }
@@ -225,6 +217,13 @@ function boot() {
     const ctx = ctxOf();
     const go = race.phase === 'racing';
     for (const k of karts) {
+      if (k.human && k.finished) {
+        // Player finished: park the kart instead of orbiting the map while waiting for the AI
+        // to cross ("I just keep going around the map" — 2026-11-09). The scoreboard is up already.
+        k.input.throttle = Math.abs(k.speed) > 0.4 ? -1 : 0;
+        k.input.steer = 0; k.input.drift = false; k.input.use = false;
+        continue;
+      }
       if (k.human && controllers[k.id]) {
         const it = controllers[k.id].intent();
         k.input.throttle = it.throttle; k.input.steer = it.steer; k.input.drift = it.drift; k.input.use = it.use;
@@ -256,14 +255,20 @@ function boot() {
       // input read stays here.
       for (let i = 0; i < karts.length; i++) if (karts[i].human && controllers[karts[i].id]) controllers[karts[i].id].intent();
     }
-    if (race.phase === 'finished' && !race._shown) {
-      race._shown = true;
-      hud.results(buildStandingsView());
+    // Show the scoreboard when the PLAYER crosses, not when the last AI trickles in: the wait
+    // made them circle a dead map for up to 60 s. It then live-refreshes once a second until
+    // the race truly ends (finish times + projected gaps for stragglers). (2026-11-09)
+    if ((race.phase === 'finished' || karts.some((k) => k.human && k.finished)) && !paused) {
+      race._resT = (race._resT || 0) + dt;
+      if (!race._shown || race._resT > 1) {
+        race._shown = true; race._resT = 0;
+        hud.results(buildStandingsView());
+      }
     }
   }
 
   function countdownText() {
-    if (!race || race.phase === 'title') return null;
+    if (!race || race.phase === 'title' || race.phase === 'finished') return null;   // 'finished' leaked a ghost GO over the results panel (2026-11-09)
     if (race.phase === 'racing') return race.clock < 0.8 ? 'GO' : null;
     const n = Math.ceil(race.countdown - 0.6);
     return n >= 1 ? String(Math.min(3, n)) : 'GO';
@@ -325,7 +330,6 @@ function boot() {
     for (const k of karts) {
       if (heldItems[k.id] !== (k.item || 0) * 1000 + (k.count || 0)) {
         heldItems[k.id] = (k.item || 0) * 1000 + (k.count || 0);
-        setHeldItem(THREE, models[k.id], k.item, k.count);
       }
     }
     for (let i = 0; i < items.boxes.length; i++) {

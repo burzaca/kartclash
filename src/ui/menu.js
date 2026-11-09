@@ -16,7 +16,7 @@
 //   focus ring, player colours. No external fonts/images/frameworks.
 //
 // ----------------------------------------------------------------------
-import { KEYMAP_LABEL, ITEM, ITEM_NAME, ITEM_DESC } from '../config.js';
+import { KEYMAP_LABEL, ITEM, ITEM_NAME, ITEM_DESC, ITEM_TABLE, ITEM_TRIPLE } from '../config.js';
 
 export function createMenu(root, opts) {
   // ---- injected single stylesheet ------------------------------------
@@ -178,7 +178,8 @@ export function createMenu(root, opts) {
     // what the pickups do — built from config so the legend can never drift from the real items
     const legend = document.createElement('div');
     legend.className = 'kc-legend';
-    for (const id of [ITEM.MUSHROOM, ITEM.GREEN_SHELL, ITEM.RED_SHELL, ITEM.BANANA, ITEM.FAKE_ITEM, ITEM.LIGHTNING, ITEM.STAR]) {
+    const sellable = [...new Set(ITEM_TABLE.flatMap((t) => t.filter((e) => e.w > 0).map((e) => ITEM_TRIPLE[e.id] ?? e.id)))];
+    for (const id of sellable) {
       const name = document.createElement('b');
       name.textContent = ITEM_NAME[id];
       const desc = document.createElement('i');

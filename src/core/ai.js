@@ -61,7 +61,10 @@ export function stepAI(kart, ai, track, ctx, dt) {
   // ---- corner speed: v = sqrt(a_lat * R), capped by skill and rubber band ----
   const curv = curvatureAhead(track, kart.plIdx);
   const radius = 1 / Math.max(curv, 1e-4);
-  const aLat = 21.0 * ai.skill * rubber;   // player lapped 33.0 s vs the field's 42-43 s even while hitting walls (2026-11-09 12.12 screenshot): corner speed was the biggest single gap
+  // cornering grip is NOT scaled by skill: the physical kart can only hold so much lateral
+  // load, and a skill-scaled target made the fast field grind walls (probe: 36 wall hits a lap,
+  // zero kart-vs-kart, 2026-11-09). skill buys straights (vMax) and items, corners stay physics-honest.
+  const aLat = 27.0 * rubber;
   const vCorner = Math.sqrt(aLat * radius);
   const vMax = KART.maxSpeed * ai.skill * rubber;
 

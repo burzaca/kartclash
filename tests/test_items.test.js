@@ -516,3 +516,23 @@ test('regression 2026-11-08c: a 3-box cluster must not be machine-gunned — sec
   k.item = 0; k.count = 0;                        // and use up what was in hand (2026-11-09: holding blocks regardless of the gap)
   assert.notEqual(items.collect(k, ctx), 0, 'after the gap, with an empty hand, it works again');
 });
+
+test('MAGNET (borrowed from Re-Volt, 2026-11-09): use sets magnetT and attaches a following effect', () => {
+  const track = makeLoopTrack();
+  const items = createItemSystem(track, mulberry32(11));
+  const me = place(track, makeTestKart(0), 60);
+  const ctx = { karts: [me] };
+  me.item = ITEM.MAGNET; me.count = 1;
+  assert.ok(items.use(me, ctx), 'magnet use failed');
+  assert.ok(me.magnetT >= ITEMS.magnet.time - 0.001, `magnetT=${me.magnetT}`);
+  assert.equal(me.count, 0, 'magnet is single-shot');
+  const fx = items.effects.find((e) => e.kind === 'magnet' && e.owner === me.id);
+  assert.ok(fx, 'no following magnet effect');
+});
+
+test('MAGNET is in every position table (it helps any place equally)', () => {
+  for (let p = 0; p < 6; p++) {
+    const t = tableForPlace(p + 1, 6);
+    assert.ok(t.some((e) => e.id === ITEM.MAGNET && e.w > 0), `place ${p + 1} has no magnet`);
+  }
+});

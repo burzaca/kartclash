@@ -753,6 +753,13 @@ export function buildItemProps(THREE) {
           group.add(mesh);
           break;
         }
+        case 'magnet': {
+          const mesh = new THREE.Mesh(new THREE.TorusGeometry(effect.radius, 0.09, 10, 32),
+            new THREE.MeshStandardMaterial({ color: 0x39c0ff, roughness: 0.25, metalness: 0.8, emissive: 0x0d4a66 }));
+          mesh.rotation.x = Math.PI / 2; mesh.position.y = 1.5;
+          group.add(mesh);
+          break;
+        }
         case 'starburst': {
           const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3),
             new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.5, metalness: 0.5 }));
@@ -766,33 +773,3 @@ export function buildItemProps(THREE) {
   };
 }
 
-export function setHeldItem(THREE, group, itemId, count) {
-  const parts = group.userData.parts;
-
-  // Remove any previously held item meshes tracked here
-  Object.keys(parts).forEach((key) => {
-    if (key.startsWith('heldItem')) {
-      group.remove(parts[key]);
-      delete parts[key];
-    }
-  });
-
-  if (itemId === 0 || count <= 0) return;
-
-  // Build fresh held item meshes (source builds them at origin, sized small)
-  const items = buildItemProps(THREE);
-  const itemGroup = new THREE.Group();
-
-  for (let i = 0; i < Math.min(count, 3); i++) {
-    const mesh = items.itemMesh(itemId).clone();
-    mesh.scale.setScalar(0.45);
-    mesh.position.set(i * 0.28 - 0.28, 0.60, 1.10);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    itemGroup.add(mesh);
-  }
-
-  itemGroup.rotation.y = Math.PI;
-  parts.heldItem = itemGroup;
-  group.add(itemGroup);
-}

@@ -247,6 +247,11 @@ export function createItemSystem(track, rng) {
         }
         return true;
       }
+      case ITEM.MAGNET: {                       // Re-Volt's magnet (2026-11-09)
+        k.magnetT = ITEMS.magnet.time;
+        makeEffect('magnet', ITEM.MAGNET, k.id, k.pos.x, k.pos.z, k.heading, 0, 1.1, ITEMS.magnet.time);
+        return true;
+      }
       case ITEM.STAR: {
         k.star = ITEMS.star.time;
         k.spin = 0;

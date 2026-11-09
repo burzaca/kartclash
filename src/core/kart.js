@@ -169,6 +169,14 @@ export function stepKart(kart, track, dt, ctx = {}) {
 
   // ---- 3. steering
   let steer = steerIn;
+  if (kart.magnetT > 0) {
+    // Re-Volt's magnet, borrowed for Kart Clash (2026-11-09): the kart sticks to the centre
+    // line on its own. Steering input is ignored while it lasts; throttle stays yours.
+    kart.magnetT -= dt;
+    const ms = track.sample(kart.pos.x, kart.pos.z, kart.plIdx);
+    const tx = ms.tx || 0, tz = ms.tz || 0;
+    if (tx || tz) steer = clamp(wrapPi(Math.atan2(tz, tx) - kart.heading) * 2.2, -1, 1);
+  } else if (d.on && d.dir !== 0)
   if (d.on && d.dir !== 0) steer = d.dir * clamp(DRIFT_STEER_BASE + DRIFT_STEER_RANGE * steerIn * d.dir, DRIFT_STEER_MIN, 1);
   const dirSign = kart.speed < 0 ? -1 : 1;                                    // reverse steers mirrored
   const yawRate = steer * dirSign * KART.steerRate * steerFalloffFactor(kart.speed)

@@ -627,3 +627,15 @@ test('AG: inward assist grows with speed², fx.ag decays to 0 over 0.5 s after l
   drive(k, flat, 0.3, { throttle: 1 });
   assert.equal(k.fx.ag, 0);
 });
+
+// ------------------------------------------------------------------ magnet (Re-Volt)
+test('MAGNET auto-steers a misaligned kart back onto the centre line', () => {
+  const k = newKart(), tr = straightTrack();
+  drive(k, tr, 2, { throttle: 1 });
+  k.heading = 0.6;                                  // knock it off line
+  k.magnetT = 5;
+  drive(k, tr, 1.0, { throttle: 1 });               // steer input: none
+  const err = Math.abs(((k.heading + Math.PI) % (2 * Math.PI)) - Math.PI);   // vs tangent atan2(0,1)=0
+  assert.ok(err < 0.05, `magnet left heading error ${err.toFixed(3)} rad`);
+  assert.ok(k.magnetT < 5 - 0.9, 'magnet timer must tick down');
+});

@@ -278,6 +278,7 @@ function boot() {
   }
 
   // A guest runs no race logic: predict own kart, mirror the rest, send input (see net.js).
+  let netAcc = 0;   // guest-side fixed-step accumulator (mirrors the host's loop)
   function clientTick(dt, nowMs) {
     const own = karts[net.myIdx];
     if (!own) return;
@@ -291,7 +292,18 @@ function boot() {
     if (race.phase !== 'racing') { own.input.use = false; own.input.drift = false; }
     // ctxLite: the physics mirror only reads ctx.fx (verified 2026-11-09) — collisions, items
     // and scoring stay host-owned and arrive through the snapshot.
-    if (race.phase === 'racing') stepKart(own, track, dt, { karts, track, items: null, fx, rng: sessionRng, time: race.clock });
+    // Prediction must mirror the HOST exactly or every snapshot correction is a visible kick:
+    // same fixed 1/60 step and the same wire-quantized inputs the host actually sees. Variable
+    // dt + raw floats here meant the two simulations drifted all day and the guest's camera
+    // was pulled back to the host's truth 20 times a second ("his screen is vibrating", 2026-11-09).
+    if (race.phase === 'racing') {
+      const q = packInput(own); applyInput(own, q);
+      const ctxLite = { karts, track, items: null, fx, rng: sessionRng, time: race.clock };
+      netAcc += dt;
+      let n = 0;
+      while (netAcc >= GAME.fixedStep && n < GAME.maxSteps) { netAcc -= GAME.fixedStep; stepKart(own, track, GAME.fixedStep, ctxLite); n++; }
+      if (n >= GAME.maxSteps) netAcc = 0;
+    } else netAcc = 0;
     if (net.conn && net.conn.open) { try { net.conn.send(packInput(own)); } catch { /* dropped */ } }
     const snap = recv.at(nowMs / 1000);
     if (snap) { applySnap(karts, race, snap, own.id, 0.3); mirrorEffects(snap.raw.e); }
@@ -644,6 +656,8 @@ function boot() {
   let pumpNow = performance.now();
   window.__game = {
     get race() { return race; }, get karts() { return karts; }, get track() { return track; },
+    get items() { return items; },
+    pack: () => packSnap(race, karts, items),   // debug: a real host snapshot, for wiring tests
     get cams() { return cams; }, get stage() { return stage; }, get fx() { return fx; },
     get controllers() { return controllers; },
     startRace, buildWorld,

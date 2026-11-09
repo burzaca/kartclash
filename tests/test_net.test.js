@@ -68,3 +68,26 @@ test('applySnap mirrors the world; own kart is corrected softly, others hard', (
   assert.ok(Math.abs(karts[1].pos.x - 100) < 0.011, 'remote kart hard-syncs');
   assert.ok(karts[0].pos.x > 11.3 && karts[0].pos.x < 11.5, `own kart soft-corrects only 30%: ${karts[0].pos.x}`);
 });
+
+test('own-kart correction never hard-sets speed (hard sets vibrate the guest camera, 2026-11-09)', () => {
+  const k = fakeKart(0);
+  k.pos.x = 5; k.heading = 0.2; k.speed = 12; k.vel.x = 12; k.vel.z = 0;
+  const karts = [k];
+  const race = { clock: 0, phase: 'racing', countdown: 0, step() {} };
+  const truth = fakeKart(0);
+  truth.pos.x = 25; truth.heading = 0.9; truth.speed = 30; truth.vel.x = 30; truth.vel.z = 0;
+  const snap = packSnap({ clock: 1, phase: 'racing', countdown: 0 }, [truth], null);
+  const rec = createReceiver(); rec.feed(snap, 0);
+  applySnap(karts, race, rec.at(0.13), 0, 0.3);
+  assert.ok(k.speed > 12 && k.speed < 30, `own speed must blend, got ${k.speed}`);
+  assert.ok(k.vel.x > 12 && k.vel.x < 30, `own velocity must blend, got ${k.vel.x}`);
+});
+
+test('inputs survive the wire unchanged at quantized precision (prediction identity)', () => {
+  const k = fakeKart(0);
+  k.input.throttle = 1; k.input.steer = -0.37421; k.input.drift = true; k.input.use = false;
+  applyInput(k, packInput(k));
+  const before = { ...k.input };
+  applyInput(k, packInput(k));
+  assert.deepEqual({ th: before.steer }, { th: k.input.steer }, 'quantized input must be a fixed point of the wire format');
+});

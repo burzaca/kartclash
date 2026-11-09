@@ -101,9 +101,13 @@ export function applySnap(karts, race, snapR, ownId, blendOwn = 0.3) {
     if (!k) continue;
     if (u.i === ownId) {
       // soft correction: local prediction ran forward; nudge toward the host's truth
+      // Everything soft. A hard speed/velocity set used to slam the prediction back 20x/s,
+      // which the camera rendered as a vibration (guest report 2026-11-09). With the
+      // prediction running the same fixed step and quantized inputs the host sees, these
+      // corrections are near-zero in normal driving and only matter after host-side events.
       k.pos.x += (u.x - k.pos.x) * blendOwn; k.pos.y += (u.y - k.pos.y) * blendOwn; k.pos.z += (u.z - k.pos.z) * blendOwn;
       k.heading += wrapPi(u.h - k.heading) * blendOwn;
-      k.speed = u.s; k.vel.x = u.vx; k.vel.z = u.vz;
+      k.speed += (u.s - k.speed) * blendOwn; k.vel.x += (u.vx - k.vel.x) * blendOwn; k.vel.z += (u.vz - k.vel.z) * blendOwn;
     } else {
       k.pos.x = u.x; k.pos.y = u.y; k.pos.z = u.z; k.heading = u.h;
       k.speed = u.s; k.vel.x = u.vx; k.vel.z = u.vz;

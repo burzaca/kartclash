@@ -22,15 +22,16 @@ def mat(name, rgba, metallic=0.0, rough=0.5):
     if 'Roughness' in bsdf.inputs: bsdf.inputs['Roughness'].default_value = rough
     return m
 
+groups = {}
+def add(obj, group):
+    groups.setdefault(group, []).append(obj)
+
+clear_scene()
 M_PAINT = mat('Green paint', (0.75, 0.05, 0.05), 0.1, 0.35)
 M_STEEL = mat('Steel', (0.75, 0.75, 0.78), 0.9, 0.25)
 M_DARK  = mat('Dark iron', (0.05, 0.05, 0.06), 0.8, 0.45)
 M_RUBB  = mat('Rubber', (0.02, 0.02, 0.02), 0.0, 0.9)
 M_RIM   = mat('White rim', (0.85, 0.85, 0.82), 0.3, 0.4)
-
-groups = {}
-def add(obj, group):
-    groups.setdefault(group, []).append(obj)
 
 def sphere(name, loc, scale, material, seg=32, ring=16):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=seg, ring_count=ring, location=loc)
@@ -62,36 +63,34 @@ def smooth(o):
 def bevel(o, width=0.02):
     m = o.modifiers.new('bev', 'BEVEL'); m.width = width; m.segments = 2
 
-clear_scene()
-
 # ---------------- body pod (repainted) : rounded tub + nose cone + seat back ----------------
-pod  = sphere('body_pod',  (0, 0.52, -0.05), (0.50, 0.42, 0.78), M_PAINT)
-nose = sphere('nose_cone', (0, 0.42, 0.85), (0.40, 0.34, 0.34), M_PAINT)
-hump = sphere('seat_hump', (0, 0.60, -0.72), (0.34, 0.30, 0.34), M_PAINT)
+pod  = sphere('body_pod',  (0, 0.36, -0.05), (0.50, 0.32, 0.78), M_PAINT)
+nose = sphere('nose_cone', (0, 0.34, 0.85), (0.40, 0.28, 0.34), M_PAINT)
+hump = sphere('seat_hump', (0, 0.40, -0.72), (0.34, 0.24, 0.34), M_PAINT)
 for p in (pod, nose, hump): smooth(p)
 add(pod, 'paint'); add(nose, 'paint'); add(hump, 'paint')
 
 # ---------------- front bumper ring: the kart's defining cartoon feature ----------------
-bumper = torus('bumper', (0, 0.34, 0.98), 0.52, 0.115, M_STEEL, rot=(math.radians(90), 0, 0))
+bumper = torus('bumper', (0, 0.30, 0.98), 0.52, 0.115, M_STEEL, rot=(math.radians(90), 0, 0))
 smooth(bumper); add(bumper, 'steel')
 # number plate: disc on the nose
-plate = cylinder('plate', (0, 0.52, 1.13), (0.22, 0.22, 0.02), M_STEEL, rot=(math.radians(90), 0, 0))
+plate = cylinder('plate', (0, 0.42, 1.13), (0.22, 0.22, 0.02), M_STEEL, rot=(math.radians(90), 0, 0))
 smooth(plate); add(plate, 'steel')
 # twin exhausts at the back
 for s in (-1, 1):
-    ex = cylinder('exhaust', (s*0.30, 0.48, -1.12), (0.07, 0.07, 0.21), M_STEEL, rot=(math.radians(90), 0, 0))
+    ex = cylinder('exhaust', (s*0.30, 0.36, -1.12), (0.07, 0.07, 0.21), M_STEEL, rot=(math.radians(90), 0, 0))
     smooth(ex); add(ex, 'steel')
 
 # ---------------- chassis + steering wheel (dark) ----------------
 chassis = box('chassis', (0, 0.18, 0), (0.72, 0.14, 1.85), M_DARK); bevel(chassis, 0.03); add(chassis, 'dark')
-col = cylinder('steer_col', (0, 0.62, 0.52), (0.035, 0.035, 0.21), M_DARK, rot=(math.radians(70), 0, 0)); add(col, 'dark')
-rim = torus('steer_rim', (0, 0.72, 0.72), 0.20, 0.03, M_DARK, rot=(math.radians(70), 0, 0), mj=20, mn=8); smooth(rim); add(rim, 'dark')
+col = cylinder('steer_col', (0, 0.50, 0.52), (0.035, 0.035, 0.21), M_DARK, rot=(math.radians(70), 0, 0)); add(col, 'dark')
+rim = torus('steer_rim', (0, 0.58, 0.72), 0.20, 0.03, M_DARK, rot=(math.radians(70), 0, 0), mj=20, mn=8); smooth(rim); add(rim, 'dark')
 # exhaust heat shields / small fins for silhouette
-fin = box('fin', (0, 0.72, -1.02), (0.66, 0.05, 0.16), M_DARK); bevel(fin, 0.02); add(fin, 'dark')
+fin = box('fin', (0, 0.55, -1.02), (0.66, 0.05, 0.16), M_DARK); bevel(fin, 0.02); add(fin, 'dark')
 
 # ---------------- seat (named node; the game seats the driver from this box) ----------------
-seat  = box('seat', (0, 0.60, -0.42), (0.46, 0.10, 0.44), M_DARK); bevel(seat, 0.03)
-backr = box('seatback', (0, 0.78, -0.60), (0.44, 0.30, 0.10), M_DARK); bevel(backr, 0.03)
+seat  = box('seat', (0, 0.36, -0.42), (0.46, 0.10, 0.44), M_DARK); bevel(seat, 0.03)
+backr = box('seatback', (0, 0.62, -0.62), (0.44, 0.34, 0.10), M_DARK); bevel(backr, 0.03)
 add(seat, 'seat')
 
 # ---------------- wheels: fat cartoon tyres with big light rims ----------------
@@ -121,10 +120,22 @@ def join(objs, name):
     out = bpy.context.active_object; out.name = name
     return out
 
+# CRITICAL: bake all object transforms into mesh data before joining. With unapplied
+# scale/rotation, Blender's join leaves the active object's TRS on the merged mesh and
+# the GLB node inherits it — the kart exported broken (garbage bounding boxes, 2026-11-09).
+bpy.ops.object.select_all(action='DESELECT')
+_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+for o in _meshes: o.select_set(True)
+bpy.context.view_layer.objects.active = _meshes[0]
+bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
 paint_o = join(groups['paint'], 'Kart_body')
 steel_o = join(groups['steel'], 'Kart_trim')
 dark_o  = join(groups['dark'],  'Kart_chassis')
-seat_o  = join([groups['seat'][0], backr], 'Kart_seat')
+# backrest goes in the BODY group: the game seats the driver on the seat group's bbox
+# top, and a joined backrest put him on top of it (2026-11-09 camera probe: kart 43% of frame)
+groups['paint'].append(backr)
+seat_o  = join([groups['seat'][0]], 'Kart_seat')
 front_o = join(front_parts, 'Kart_wheels_front')
 back_o  = join(back_parts,  'Kart_wheels_back')
 

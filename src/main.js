@@ -167,13 +167,14 @@ function boot() {
   function swapToModelKarts() {
     if (!karts) return;
     for (let i = 0; i < models.length && i < karts.length; i++) {
-      if (models[i] && models[i].userData.parts && models[i].userData.parts.model === 'pixor') continue;
+      if (models[i] && models[i].userData.parts && models[i].userData.parts.model === 'glb') continue;
       if (!models[i]) continue;
       scene.remove(models[i]);
       const g = buildKartModel(THREE, karts[i].spec, karts[i].id);
       scene.add(g); models[i] = g;
       setHeldItem(THREE, g, karts[i].item, karts[i].count);
     }
+    setStamp();   // honest model: after the async swap — a stamp frozen at boot always lied 'lathe' (2026-11-09)
   }
   function buildStandingsView() {
     return standings(race).map((r) => ({
@@ -415,10 +416,11 @@ function boot() {
   });
   menu.showTitle(menuInfo());
   // the corner stamp exists so a player and I can agree on which build they are looking at
-  {
+  const setStamp = () => {
     const brand = document.getElementById('brand');
     if (brand) brand.textContent = `${GAME.title} · three.js r${THREE.REVISION} · build ${GAME.build} · model:${modelSource()}`;
-  }
+  };
+  setStamp();
   if (allAI) { startRace(); menu.hide(); }   // hands-off smoke run for the browser harness
   requestAnimationFrame(frame);
   let pumpNow = performance.now();

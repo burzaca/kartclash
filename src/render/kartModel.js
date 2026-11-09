@@ -5,12 +5,13 @@
 // No flatShading anywhere; high segment counts; all parts cast/receive shadow.
 // kart within ~2.2 m radius, ~1.6 m tall.
 
-// ===================================================================== GLB go-kart (v3 §9)
-// One CC0 kart (pixor.art), vendored; every racer gets its own repainted clone.
-const KART_GLB = '../../vendor/assets/karts/pixor.glb';
-// Longest horizontal extent. §9 asked 2.05 (lathe length), but pixor is narrower (w/l 0.70 vs the
-// lathe's 0.91): at 2.05 the chase cam read it 18-25% vs the lathe's 21-29%. 2.35 measured back to parity.
-export const KART_LEN = 2.35;
+// ===================================================================== GLB go-kart (v4)
+// Blender-modeled Mario-style kart (tools/mario_kart.py regenerates it); every racer gets its own repainted clone.
+const KART_GLB = '../../vendor/assets/karts/mario-kart.glb';
+// Longest horizontal extent. pixor needed 2.35 for camera parity with the lathe kart; the
+// Blender kart is authored ~2.5 long (trim ring included), so this now scales it DOWN —
+// tools/probe-glb.mjs gates that the silhouette stays in the same screen-size band.
+export const KART_LEN = 2.1;   // 2.35 put the wide Mario body at 37% of frame height (gate 34%); 2.1 measures 33% — same class as the lathe kart's 2.05 that always passed
 export const DRIVER_H = 1.15;   // driver's total height (matches the old kart silhouette)
 let kartCache = null, kartLoading = null;
 
@@ -124,7 +125,7 @@ function buildGlbKart(THREE, spec, scene) {
 
   group.userData.parts = { body: kart, chassis: null, wheels, wheelSpinners: spinners, spinAxis: 'x',
     driver, helmet, visor, exhaust: [], flame: [], shield: null, spark: null, shadowBlob: null,
-    rig, paint, model: 'pixor', fit: fit.scale };
+    rig, paint, model: 'glb', fit: fit.scale };
   return group;
 }
 

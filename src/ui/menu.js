@@ -17,6 +17,7 @@
 //
 // ----------------------------------------------------------------------
 import { KEYMAP_LABEL, ITEM, ITEM_NAME, ITEM_DESC, ITEM_TABLE, ITEM_TRIPLE } from '../config.js';
+import { setBinding } from '../core/input.js';
 
 export function createMenu(root, opts) {
   // ---- injected single stylesheet ------------------------------------
@@ -232,6 +233,12 @@ export function createMenu(root, opts) {
     btnSwitch.dataset.action = 'switch';
     btnGrp.appendChild(btnSwitch);
 
+    const btnKeys = document.createElement('button');
+    btnKeys.className = 'kc-btn';
+    btnKeys.textContent = 'Configure Keys';
+    btnKeys.dataset.action = 'keys';
+    btnGrp.appendChild(btnKeys);
+
     // ---- ROOM (online): a 4-letter code is the invite pass — only someone who has it can dial in.
     // Host-authoritative (main.js + core/net.js); v1 field = host + 1 guest + optional bots,
     // because the split-screen HUD has exactly two camera slots. ----
@@ -279,6 +286,74 @@ export function createMenu(root, opts) {
   }
 
   // ---- build pause overlay -------------------------------------------
+
+  // ---- KEYS settings (player request 2026-11-09): every player picks their own keys. ----
+  // Click a binding, press the new key, ESC cancels. Stored by input.js (localStorage) and
+  // shown live here AND in the title/pause control lines, which read KEYMAP_LABEL too.
+  let lastKeysInfo = null, pendingKeyH = null;
+  function keyLabel(code) {
+    const names = { Space: 'SPACE', ShiftLeft: 'LEFT SHIFT', ShiftRight: 'RIGHT SHIFT',
+      ControlLeft: 'LEFT CTRL', ControlRight: 'RIGHT CTRL', AltLeft: 'ALT', Tab: 'TAB',
+      Enter: 'ENTER', Backspace: 'BKSP', Backquote: '`', Minus: '-', Equal: '=',
+      BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Comma: ', (comma)',
+      Period: '. (period)', Slash: '/ (slash)', Backslash: '\\', ArrowUp: 'UP', ArrowDown: 'DOWN',
+      ArrowLeft: 'LEFT', ArrowRight: 'RIGHT' };
+    if (names[code]) return names[code];
+    const m = /^(?:Key|Digit)(.)$/.exec(code);
+    return m ? m[1].toUpperCase() : code;
+  }
+  function buildKeys() {
+    if (pendingKeyH) { document.removeEventListener('keydown', pendingKeyH, true); pendingKeyH = null; }
+    menuRoot.innerHTML = '';
+    const title = document.createElement('h1');
+    title.className = 'kc-title';
+    title.textContent = 'KEY SETTINGS';
+    menuRoot.appendChild(title);
+    const hint = document.createElement('p');
+    hint.className = 'kc-subtitle';
+    hint.textContent = 'click a key, then press the one you want - ESC cancels. P1 is what YOU use online.';
+    menuRoot.appendChild(hint);
+    const players = (lastKeysInfo && lastKeysInfo.players) || [];
+    for (const p of players) {
+      const km = KEYMAP_LABEL[p.keys] || {};
+      const row = document.createElement('div');
+      row.className = 'kc-control';
+      const who = document.createElement('b');
+      who.textContent = `${p.name}: `;
+      row.appendChild(who);
+      for (const [act, label] of [['up', 'drive'], ['down', 'brake'], ['left', 'left'],
+                                  ['right', 'right'], ['drift', 'drift'], ['use', 'item']]) {
+        const b = document.createElement('button');
+        b.className = 'kc-btn';
+        b.dataset.action = `rebind:${p.keys}:${act}`;
+        b.textContent = `${label} [${km[act] || '?'}]`;
+        row.appendChild(b);
+      }
+      menuRoot.appendChild(row);
+    }
+    const back = document.createElement('button');
+    back.className = 'kc-btn';
+    back.textContent = 'Back';
+    back.dataset.action = 'keysback';
+    menuRoot.appendChild(back);
+  }
+  function beginRebind(spec, btn) {
+    const parts = String(spec).split(':');           // rebind:<binding name>:<action>
+    const name = parts[1], action = parts[2];
+    if (!KEYMAP_LABEL[name] || !btn) return;
+    if (pendingKeyH) document.removeEventListener('keydown', pendingKeyH, true);
+    btn.textContent = `${action}: PRESS A KEY...`;
+    const h = (e) => {
+      e.preventDefault(); e.stopPropagation();       // the pressed key is a rebinding, not gameplay
+      document.removeEventListener('keydown', h, true);
+      pendingKeyH = null;
+      if (e.code !== 'Escape') setBinding(name, action, e.code, keyLabel(e.code));
+      buildKeys();
+    };
+    pendingKeyH = h;
+    document.addEventListener('keydown', h, true);
+  }
+
   function buildPause() {
     menuRoot.innerHTML = '';
     const overlay = document.createElement('div');
@@ -395,6 +470,13 @@ export function createMenu(root, opts) {
       visibleMode = 'title';
     },
 
+    // showKeys - key-settings panel (title only)
+    showKeys(info) {
+      lastKeysInfo = info || lastKeysInfo;
+      visibleMode = 'keys';
+      buildKeys();
+    },
+
     // showPause - pause overlay (pass the current info so the camera setting shown is current)
     showPause(info) {
       if (info) lastInfo = info;
@@ -464,6 +546,7 @@ export function createMenu(root, opts) {
         const btn = e.target && e.target.closest ? e.target.closest('.kc-btn') : null;
         if (!btn) return;
         const action = btn.dataset.action;
+        if (String(action).indexOf('rebind:') === 0) { beginRebind(action, btn); return; }
         cb(action);
         // see the keydown handler: 'quit' redraws the title itself; hiding afterwards = no menu
         if (action === 'start' || action === 'resume') menu.hide();

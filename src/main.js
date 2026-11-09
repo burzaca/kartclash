@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { GAME, RACE, CAM, KART, PLAYERS, AI_DRIVERS, KEYMAP, GLOBAL_KEYS, TRACKS, ITEM, ITEM_NAME, KEYMAP_LABEL, RENDER } from './config.js';
 import { clamp, damp, lerp, mulberry32, hashSeed } from './foundation.js';
 import { buildTrack } from './core/track.js';
-import { createControllers } from './core/input.js';
+import { createControllers, loadBindings } from './core/input.js';
 import { packSnap, createReceiver, applySnap, packInput, applyInput } from './core/net.js';
 import { createKart, stepKart, resolveKartCollisions, resetKart } from './core/kart.js';
 import { createItemSystem } from './core/items.js';
@@ -59,6 +59,7 @@ function boot() {
       return typeof raw === 'string' ? { 0: raw } : (raw || {}); } catch { return {}; }
   })();
   if (qs.get('cam')) rig.setPreset(qs.get('cam'));
+  loadBindings();   // player-set keys from localStorage (title > Configure Keys)
 
   function buildWorld() {
     // tear down
@@ -86,6 +87,9 @@ function boot() {
     for (let i = 0; i < humanCount; i++) {
       const spec = { ...PLAYERS[i % PLAYERS.length] };
       if (humanNames && humanNames[i]) spec.name = humanNames[i];
+      // online: on YOUR machine you are player 1 with YOUR keys - the second seat's local
+      // bindings were the complaint ("why does the other player use keys like one keyboard")
+      if (net.mode !== 'solo') spec.keys = PLAYERS[0].keys;
       specs.push({ spec, human: true });
     }
     // rooms own their bot count (the user asked for a bots-off option); solo keeps the full field
@@ -123,18 +127,23 @@ function boot() {
       controllers[karts[i].id] = c;
     }
 
+    // a REMOTE human (the online guest) needs no camera and no HUD pane on MY screen:
+    // they race inside my world, on their own screen (player report 2026-11-09 - split
+    // screen made no sense online). Local input count is what owns viewports.
+    const nLocal = Math.max(1, karts.filter((k) => k.human && !k.remote).length);
+
     race = createRace(track, karts);
     race.totalLaps = track.def.laps;
 
-    hud = createHUD(uiRoot, karts.map((k) => ({ id: k.id, name: k.name, spec: k.spec, human: k.human })), { players: humanCount, debug: DEBUG_HUD });
+    hud = createHUD(uiRoot, karts.map((k) => ({ id: k.id, name: k.name, spec: k.spec, human: k.human })), { players: nLocal, debug: DEBUG_HUD });
     hud.setTrack(track.minimap);
 
     // one chase camera per human (in the all-AI smoke run, per kart)
     rig.reset();
-    let camSlots = humanCount;
+    let camSlots = nLocal;
     for (const k of karts) {
       if (camSlots <= 0) break;
-      if (!k.human && !allAI) continue;    // in the all-AI smoke run the cameras spectate the field
+      if ((!k.human || k.remote) && !allAI) continue;   // in the all-AI smoke run the cameras spectate the field
       camSlots--;
       const camIdxNew = rig.cams.length; rig.addCamera();
       if (storedCams[String(camIdxNew)]) rig.setPresetFor(camIdxNew, storedCams[String(camIdxNew)]);
@@ -212,6 +221,8 @@ function boot() {
           if (started) sendRoom(cfgMsg());          // joining mid-race: hand them the live world
           menu.showTitle(menuInfo());
         } else if (m.t === 'i') { (netInput || (netInput = {}))[1] = m; }
+        else if (m.t === 'p') { setPausedLocal(m.v); sendRoom({ t: 'p', v: m.v }); }   // echo: it is a room-wide pause
+        else if (m.t === 'r') doRestart();
       });
       c.on('close', () => {
         net.conn = null; netInput = null; net.guestName = '';
@@ -240,6 +251,8 @@ function boot() {
       c.on('data', (m) => {
         if (m.t === 'cfg') startClientRace(m);
         else if (m.t === 's') recv.feed(m, performance.now() / 1000);
+        else if (m.t === 'p') setPausedLocal(m.v);
+        else if (m.t === 'r') { race.start(); hud.hideResults(); }
       });
       c.on('close', () => {
         net.conn = null;
@@ -312,10 +325,23 @@ function boot() {
 
   // Pause is one operation, not four flags: the HUD must go with it (its panels covered the
   // pause menu's buttons, player report 2026-11-09) and a frozen race needs no race data.
-  function setPaused(v) {
+  function setPausedLocal(v) {
     paused = v;
     hud.setHidden(v);
     if (v) menu.showPause(menuInfo()); else menu.hidePause();
+  }
+  // A pause in a room pauses EVERYONE (player request 2026-11-09): the host is the clock,
+  // so anyone's pause goes to the host, and the host applies it and tells the other side.
+  function setPaused(v) {
+    if (net.mode === 'host') { setPausedLocal(v); sendRoom({ t: 'p', v }); }
+    else if (net.mode === 'client') sendRoom({ t: 'p', v });
+    else setPausedLocal(v);
+  }
+  // Restart follows the same rule: one side asks, the host re-lights the field for both.
+  function doRestart() {
+    if (net.mode === 'client') { sendRoom({ t: 'r' }); return; }
+    race.start(); hud.hideResults(); setPaused(false);
+    if (net.mode === 'host') sendRoom({ t: 'r' });
   }
 
   // Replace any procedural fallback kart groups with the real GLB karts, keeping game state intact.
@@ -332,7 +358,8 @@ function boot() {
   }
   function buildStandingsView() {
     return standings(race).map((r) => ({
-      name: r.name, color: r.spec.color, isPlayer: r.isPlayer,
+      name: r.name, color: r.spec.color,
+      isPlayer: net.mode === 'client' ? r.id === net.myIdx : (net.mode === 'host' ? r.id === 0 : r.isPlayer),
       timeOrGap: r.finished ? fmtTime(r.time) : (r.gap > 0.05 ? `+${r.gap.toFixed(2)}` : '---'),
       bestLap: isFinite(r.bestLap) ? fmtTime(r.bestLap) : '--:--.-',
     }));
@@ -457,7 +484,7 @@ function boot() {
   function computeViewports(w, h) {
     const vps = [];
     if (cams.length <= 1) {
-      vps.push({ i: 0, x: 0, y: 0, w, h, kartId: karts.find((k) => k.human)?.id ?? 0 });
+      vps.push({ i: 0, x: 0, y: 0, w, h, kartId: (karts.find((k) => k.human && !k.remote) || karts.find((k) => k.human))?.id ?? 0 });
     } else {
       const hh = Math.floor(h / 2);
       vps.push({ i: 0, x: 0, y: 0, w, h: hh, kartId: karts[0].id });
@@ -556,8 +583,8 @@ function boot() {
     // after the flag, Esc/Enter goes back to the title screen (it used to do nothing at all)
     if (started && race.phase === 'finished' && (e.code === 'Escape' || e.code === 'Enter')) { toTitle(); return; }
     if (started && race.phase !== 'finished' && GLOBAL_KEYS.pause.includes(e.code)) { setPaused(!paused); return; }
-    if (GLOBAL_KEYS.restart.includes(e.code)) { if (started) { race.start(); hud.hideResults(); } return; }   // R from a live race (pause stays paused: Resume resumes it)
-    if (started && race.phase === 'finished' && e.code === 'Enter') { race.start(); hud.hideResults(); return; }
+    if (GLOBAL_KEYS.restart.includes(e.code)) { if (started) doRestart(); return; }   // R from a live race (pause stays paused: Resume resumes it)
+    if (started && race.phase === 'finished' && e.code === 'Enter') { doRestart(); return; }
     if (!started && e.code === 'Enter') { startRace(); return; }
     const camFor = (CAM.camKeys || {})[e.code];
     if (camFor !== undefined) {
@@ -578,10 +605,12 @@ function boot() {
   menu.onAction((a) => {
     if (a === 'start') { humanCount = 2; buildWorld(); startRace(); }
     else if (a === 'p1only') { humanCount = 1; buildWorld(); startRace(); }
-    else if (a === 'restart') { if (started) { race.start(); hud.hideResults(); setPaused(false); } }   // pause-menu Restart Race: restart AND resume (no-op at the title, 2026-11-09)
+    else if (a === 'restart') { if (started) doRestart(); }   // pause-menu Restart Race: one restart for the whole room
     else if (a === 'resume') { setPaused(false); }
-    else if (a === 'quit') { toTitle(); }
+    else if (a === 'quit') { if (net.mode !== 'solo') leaveRoom(); else toTitle(); }
     else if (a === 'switch' || a === 'next') { trackIdx = (trackIdx + 1) % TRACKS.length; if (net.mode === 'client') return; buildWorld(); race.start(); hud.setHidden(true); menu.showTitle(menuInfo()); }
+    else if (a === 'keys') { if (!started) menu.showKeys(menuInfo()); }
+    else if (a === 'keysback') { if (!started) menu.showTitle(menuInfo()); }
     else if (a === 'host') { if (net.mode === 'solo') hostRoom(); }
     else if (a === 'join') { if (net.mode === 'solo') joinRoom(); }
     else if (a === 'leave') { leaveRoom(); }

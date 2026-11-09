@@ -2,7 +2,7 @@
 // PURE at import time: no DOM access until attach() is called with a target.
 // Contract: docs/INTERFACES.md §2.
 
-import { KEYMAP } from '../config.js';
+import { KEYMAP, KEYMAP_LABEL } from '../config.js';
 
 const ACTIONS = ['up', 'down', 'left', 'right', 'drift', 'use'];
 
@@ -42,6 +42,7 @@ function makeController(spec, index) {
       ctrl.detach();
       target = t;
       onDown = (e) => {
+        if (e.target && e.target.tagName === 'INPUT') return;   // typing a room code must not drive the kart
         const a = codeToAction[e.code];
         if (!a) return;
         if (e.preventDefault) e.preventDefault();      // arrows/space must not scroll the page
@@ -49,6 +50,7 @@ function makeController(spec, index) {
         ctrl.press(a);
       };
       onUp = (e) => {
+        if (e.target && e.target.tagName === 'INPUT') return;
         const a = codeToAction[e.code];
         if (!a) return;
         if (e.preventDefault) e.preventDefault();
@@ -92,4 +94,26 @@ export function createControllers(count, specs = []) {
   const out = [];
   for (let i = 0; i < count; i++) out.push(makeController(specs[i] || { human: false }, i));
   return out;
+}
+
+// ---- persistent key remapping (settings panel; user request 2026-11-09) ----
+// Overrides persist per binding NAME ('wasd'/'arrows') in localStorage and merge into
+// KEYMAP/KEYMAP_LABEL at startup. Controllers copy the map when a world is built, so a
+// rebind applies from the next race - the settings panel lives on the title, which fits.
+const LS_KEY = 'kc-keys-v1';
+const safeLS = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; } };
+export function loadBindings() {
+  const s = safeLS();
+  for (const name in s) {
+    if (!KEYMAP[name]) continue;
+    for (const a in s[name]) if (a in KEYMAP[name]) { KEYMAP[name][a] = s[name][a]; }
+  }
+}
+export function setBinding(name, action, code, label) {
+  if (!KEYMAP[name] || !(action in KEYMAP[name])) return false;
+  KEYMAP[name][action] = code;
+  if (KEYMAP_LABEL[name]) KEYMAP_LABEL[name][action] = label || code;
+  const s = safeLS(); (s[name] || (s[name] = {}))[action] = code;
+  try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch { /* private mode */ }
+  return true;
 }

@@ -101,3 +101,16 @@ test('title screen offers the ROOM flow and the code gate', () => {
   assert.ok(!acts3.includes('roomstart'), 'only the host may start a room race');
   assert.ok(!acts3.includes('host') && !acts3.includes('join'), 'a joined guest must not re-host/re-join');
 });
+
+// "Please make settings, so every player can choose his keys" (player report 2026-11-09)
+test('the title offers key settings; the panel lists every binding of both players', () => {
+  const { root, m } = menu();
+  m.showTitle(info);
+  assert(byClass(root, 'kc-btn').some((b) => b.dataset.action === 'keys'), 'no Configure Keys button on the title');
+  m.showKeys(info);
+  const btns = byClass(root, 'kc-btn');
+  const rebinds = btns.filter((b) => String(b.dataset.action || '').startsWith('rebind:'));
+  assert.equal(rebinds.length, 12, 'expected 6 actions x 2 players, got ' + rebinds.length);
+  assert(btns.some((b) => b.dataset.action === 'keysback'), 'keys panel must have a Back route');
+  assert(text(root).includes('SPACE'), 'panel must show the CURRENT key for each action');
+});

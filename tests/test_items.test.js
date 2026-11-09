@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ITEM, ITEM_COUNT, ITEM_TABLE, ITEMS, KART, PLAYERS, tableForPlace } from '../src/config.js';
+import { AI, ITEM, ITEM_COUNT, ITEM_TABLE, ITEMS, KART, PLAYERS, tableForPlace } from '../src/config.js';
 import { mulberry32, buildPolyline, nearestOnPolyline, frameAt, advanceIdx } from '../src/foundation.js';
 import { createItemSystem } from '../src/core/items.js';
 
@@ -561,4 +561,11 @@ test('BOXING GLOVE (Re-Volt): punches the nearest kart ahead, misses what is beh
 test('glove never appears for the leader (chaser weapon, rows 2+ only)', () => {
   assert.ok(!ITEM_TABLE[0].some((e) => e.id === ITEM.GLOVE && e.w > 0));
   assert.ok(ITEM_TABLE[6].some((e) => e.id === ITEM.GLOVE && e.w > 0));
+});
+
+test('green shells outrun everything on the field (they could not catch a kart on a straight, 2026-11-09)', () => {
+  // the fastest thing in a race: an AI at the top of its skill band, tail-band rubber, at full boost
+  const fastestAI = KART.maxSpeed * (1 + (AI.skillBase - 1) * 0.8) * AI.rubber.tailBand;
+  assert.ok(ITEMS.shell.speed > fastestAI * 1.15, `green ${ITEMS.shell.speed} vs fastest kart ${fastestAI.toFixed(1)}`);
+  assert.ok(ITEMS.shell.speed * ITEMS.shell.redSpeedMul > ITEMS.shell.speed, 'red stays the stronger shell');
 });

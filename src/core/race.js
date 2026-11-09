@@ -218,7 +218,7 @@ export function standings(race) {
       lap: k.lap, laps: race.totalLaps,
       finished: k.finished, time: k.finishTime, gap, bestLap: k.bestLap, lapTimes: k.lapTimes,
       speed: k.speed, item: k.item, count: k.count, star: k.star, invisible: k.invisible,
-      shrunk: k.shrunk, spin: k.spin, offRoad: k.offRoad, boost: k.boost.time, isPlayer: k.human,
+      id: k.id, shrunk: k.shrunk, spin: k.spin, offRoad: k.offRoad, boost: k.boost.time, isPlayer: k.human,
       progress: k.progress, heading: k.heading, pos: k.pos,
     };
   });

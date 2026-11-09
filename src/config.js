@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-09.8',
+  build: '2026-11-09.9',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,
@@ -73,7 +73,8 @@ export const ITEMS = {
                              // each silently replacing the last — "the 2 adjacent ones disappeared")
   boxCount: 5,               // boxes across the road at each node
   itemGap: 0.55,             // s cooldown between uses
-  shell: { speed: 42, redSpeedMul: 1.35, life: 7.0, radius: 1.1, bounce: 0.9, wallBounceLife: 1.5 },
+  // green must outrun the fastest AI on a straight (42 lost to 40.8+boost karts, player report 2026-11-09)
+  shell: { speed: 55, redSpeedMul: 1.25, life: 7.0, radius: 1.1, bounce: 0.9, wallBounceLife: 1.5 },
   redHomingRadius: 60, redTurnRate: 2.6,
   banana: { life: 26, radius: 1.3, dropBack: 6.0 },
   cloud: { invisTime: 6.0 },

@@ -2,7 +2,7 @@
 // geometry (no stubs), never throw, and never use flat shading. Real three.js, no WebGL context.
 import * as THREE from '../vendor/three.module.js';  // vendored: the tools run with no node_modules
 import { PLAYERS, AI_DRIVERS, ITEM, TRACKS } from '../src/config.js';
-import { buildKartModel, updateKartModel, buildItemProps, setHeldItem } from '../src/render/kartModel.js';
+import { buildKartModel, updateKartModel, buildItemProps } from '../src/render/kartModel.js';
 import { createFX } from '../src/render/fx.js';
 import { createKart } from '../src/core/kart.js';
 
@@ -45,7 +45,6 @@ export async function renderSmoke() {
     if (!parts) errors.push(`buildKartModel(${spec.name}): no userData.parts handle table`);
     else if (!parts.wheels || parts.wheels.length !== 4) errors.push(`${spec.name}: wheels must be 4, got ${parts.wheels ? parts.wheels.length : 'none'}`);
     try { updateKartModel(g, animatedKart(spec), 1 / 60); } catch (e) { errors.push(`updateKartModel(${spec.name}) threw: ${e.message}`); }
-    try { setHeldItem(THREE, g, ITEM.MUSHROOM, 1); setHeldItem(THREE, g, 0, 0); } catch (e) { errors.push(`setHeldItem(${spec.name}) threw: ${e.message}`); }
 
     // ground contact + silhouette size: the physics puts the kart origin on the road surface,
     // so the wheels must rest at y=0 and the kart must fit the chase-camera framing.

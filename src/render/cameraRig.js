@@ -78,7 +78,10 @@ export function createCameraRig(THREE) {
         const fx = Math.cos(st.yaw), fz = Math.sin(st.yaw);
 
         // Distance stays near-constant at any speed (player ask); pulls are deliberately tiny.
-        const back = pose.back + spd * CAM.speedPull + (k.boost.time > 0 ? CAM.boostPull : 0);
+        // A kart that was just rammed or spun is momentarily slow right in front of the camera —
+        // without a pull this reads as 'the kart fills the screen' (probe --cam=close, 38.4%, 2026-11-09).
+        const hit = k.hitFlash > 0 || k.spin > 0 ? CAM.hitPull : 0;
+        const back = pose.back + spd * CAM.speedPull + (k.boost.time > 0 ? CAM.boostPull : 0) + hit;
         const up = pose.up + spd * CAM.upPull;
         const px = k.pos.x - fx * back, pz = k.pos.z - fz * back;
         const wantH = track.surfaceY(px, pz) + up + k.air.y * 0.55;

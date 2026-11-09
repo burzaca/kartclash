@@ -6,7 +6,7 @@ export const GAME = {
   subtitle: 'GOLD CUP — MUSHROOM CIRCUIT',
   // Shown on the title screen and in the corner of the game, so "I still see no menu" can be
   // answered with "what build number do you see?" instead of guesswork about cached files.
-  build: '2026-11-09.6',
+  build: '2026-11-09.7',
   fixedStep: 1 / 120,      // physics runs at a fixed 120 Hz step
   maxSteps: 8,             // clamp catch-up steps per frame
   laps: 3,
@@ -140,7 +140,7 @@ export const CAM = {
   // so it is a control, not a guess. C cycles these in game; each one is measured by
   // tools/probe-camera.js (the kart must stay a readable size, the road ahead in view).
   presets: {
-    close: { back: 8.0, up: 3.0, lead: 4.8 },
+    close: { back: 9.0, up: 3.4, lead: 5.1 },
     normal: { back: 9.2, up: 3.4, lead: 5.5 },
     far: { back: 12.5, up: 4.6, lead: 7.5 },
   },
@@ -150,7 +150,7 @@ export const CAM = {
   camKeys: { KeyC: 0, KeyM: 1 },           // per-player camera cycling (P1 = C, P2 = M)
   fov: 64, fovBoost: 68, fovSpeed: 0.08,   // player asked: never fall far at speed; only a mild fov kick
   near: 0.5, far: 900,
-  speedPull: 0.3, upPull: 0.3, boostPull: 0.6,   // keep framing near-constant at any speed
+  speedPull: 0.8, upPull: 0.3, boostPull: 0.6, hitPull: 1.6,   // +pull right after a hit/spin, until the kart is driving again   // keep framing near-constant at any speed
   split: 'horizontal',                       // 2P: stacked halves (classic MK on TV)
   shakeDecay: 4.0,
 };

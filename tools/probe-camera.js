@@ -163,6 +163,7 @@ function runTrack(def) {
       if (h < 0.14) samples.push({ t: +race.clock.toFixed(1), why: `kart only ${(h * 100).toFixed(1)}% of frame height (cam ${dist.toFixed(1)} m away, kart ${k.speed.toFixed(1)} m/s)` });
       if (h > 0.34) samples.push({ t: +race.clock.toFixed(1), why: `kart fills ${(h * 100).toFixed(1)}% of the frame — camera too close` });
       worstSize = Math.min(worstSize, h); bestSize = Math.max(bestSize, h);
+      if (h > 0.34) console.log(`  BIG t=${race.clock.toFixed(1)} size=${(h*100).toFixed(1)}% spd=${k.speed.toFixed(1)} air=${k.air.y.toFixed(2)} spin=${k.spin.toFixed(2)} boost=${k.boost.time.toFixed(1)} cam=${dist.toFixed(2)} vp=${i}`);
 
       // the road ahead must be in frame — a chase cam that only shows sky is useless.
       // The player asked for the camera to "go forward": that means the visible road distance is
@@ -201,6 +202,7 @@ function runTrack(def) {
   else ok(`road ahead in view: typical ${typicalAhead} m, worst ${worstAhead} m`);
   if (buried > 0) fail(`${buried} frames with the camera under the track surface`);
   else ok('camera stays above the surface');
+  for (const smp of samples) if (smp.why && smp.why.includes('fills')) console.log('  BIG:', smp.why);
   if (worstSize * 100 < 14) fail(`player kart drops to ${(worstSize * 100).toFixed(1)}% of the viewport height — camera too far back at speed`);
   else if (bestSize * 100 > 34) fail(`player kart reaches ${(bestSize * 100).toFixed(1)}% of the viewport — camera too close`);
   else ok(`kart reads ${(worstSize * 100).toFixed(0)}-${(bestSize * 100).toFixed(0)}% of its viewport`);
